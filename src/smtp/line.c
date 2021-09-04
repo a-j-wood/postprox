@@ -22,7 +22,7 @@
 
 
 int smtp_runfilter(opts_t, char *, char *, char *, int, char *, char *,
-		   char *, char *);
+		   char *, char *, char *, int);
 
 
 /*
@@ -36,8 +36,8 @@ int smtp_runfilter(opts_t, char *, char *, char *, int, char *, char *,
  */
 static int smtp_processline__dataend(ppsmtp_t state)
 {
-	char filtererr[256];		 /* RATS: ignore (OK) */
-	char errbuf[256];		 /* RATS: ignore (OK) */
+	char filtererr[2048];		 /* RATS: ignore (OK) */
+	char errbuf[2048];		 /* RATS: ignore (OK) */
 	unsigned long messagesize;
 	struct stat sb;
 	char *ptr;
@@ -68,7 +68,10 @@ static int smtp_processline__dataend(ppsmtp_t state)
 			   (state->helo == NULL ? "" : state->helo),
 			   (state->sender == NULL ? "" : state->sender),
 			   (state->recipient ==
-			    NULL ? "" : state->recipient));
+			    NULL ? "" : state->recipient),
+			   (state->recipients ==
+			    NULL ? "" : state->recipients),
+			   state->recipientcount);
 
 	unlink(state->spoolfile);
 	free(state->spoolfile);
@@ -79,7 +82,8 @@ static int smtp_processline__dataend(ppsmtp_t state)
 	state->outspoolfile = NULL;
 
 	/*
-	 * End the filter error output at the first \r or \n.
+	 * End the filter error output at the first \r or \n or
+	 * at 750 characters (whichever is first).
 	 */
 	ptr = strchr(filtererr, '\r');
 	if (ptr)
@@ -87,6 +91,8 @@ static int smtp_processline__dataend(ppsmtp_t state)
 	ptr = strchr(filtererr, '\n');
 	if (ptr)
 		ptr[0] = 0;
+	if (strlen(filtererr) > 750)
+		strcpy(filtererr + 746, "...");
 
 	if (ret > 0) {
 		/*
@@ -106,11 +112,11 @@ static int smtp_processline__dataend(ppsmtp_t state)
 		    && ((filtererr[2] >= '0') && (filtererr[2] <= '9'))
 		    && (filtererr[3] == ' ')
 		    ) {
-			sprintf(errbuf, "%.200s\r\n", filtererr);
+			sprintf(errbuf, "%.2040s\r\n", filtererr);
 		} else if (filtererr[0] != 0) {
-			sprintf(errbuf, "554 %.200s\r\n", filtererr);
+			sprintf(errbuf, "554 %.2040s\r\n", filtererr);
 		} else {
-			sprintf(errbuf, "554 %.200s\r\n",
+			sprintf(errbuf, "554 %.2040s\r\n",
 				_("Content rejected"));
 		}
 
@@ -125,7 +131,7 @@ static int smtp_processline__dataend(ppsmtp_t state)
 			if (ptr)
 				ptr[0] = 0;
 			log_line(LOGPRI_INFO,
-				 "%s: %s=%.40s (%.60s), %s=%.99s, %s=%.99s, %s=%lu: %.200s",
+				 "%s: %s=%.40s (%.60s), %s=%.99s, %s=%.500s, %s=%lu, %s=%lu: %.750s",
 				 _("reject"), _("host"),
 				 (state->ipaddr ==
 				  NULL ? "???" : state->ipaddr),
@@ -133,8 +139,9 @@ static int smtp_processline__dataend(ppsmtp_t state)
 				  NULL ? "???" : state->helo), _("from"),
 				 (state->sender ==
 				  NULL ? "???" : state->sender), _("to"),
-				 (state->recipient ==
-				  NULL ? "???" : state->recipient),
+				 (state->recipients ==
+				  NULL ? "???" : state->recipients),
+				 _("rcpts"), state->recipientcount,
 				 _("size"), messagesize, errbuf);
 		}
 
@@ -159,7 +166,7 @@ static int smtp_processline__dataend(ppsmtp_t state)
 
 		if (state->opts->verbose > 0) {
 			log_line(LOGPRI_INFO,
-				 "%s: %s=%.40s (%.60s), %s=%.99s, %s=%.99s, %s=%lu: %.200s",
+				 "%s: %s=%.40s (%.60s), %s=%.99s, %s=%.500s, %s=%lu, %s=%lu: %.750s",
 				 _("reject"), _("host"),
 				 (state->ipaddr ==
 				  NULL ? "???" : state->ipaddr),
@@ -167,8 +174,9 @@ static int smtp_processline__dataend(ppsmtp_t state)
 				  NULL ? "???" : state->helo), _("from"),
 				 (state->sender ==
 				  NULL ? "???" : state->sender), _("to"),
-				 (state->recipient ==
-				  NULL ? "???" : state->recipient),
+				 (state->recipients ==
+				  NULL ? "???" : state->recipients),
+				 _("rcpts"), state->recipientcount,
 				 _("size"), messagesize,
 				 _("failed to run filter"));
 		}
@@ -324,7 +332,7 @@ static int smtp_processline__dataend(ppsmtp_t state)
 	if (state->opts->verbose > 0) {
 		if (ret < 0) {
 			log_line(LOGPRI_INFO,
-				 "%s: %s=%.40s (%.60s), %s=%.99s, %s=%.99s, %s=%lu: %.200s",
+				 "%s: %s=%.40s (%.60s), %s=%.99s, %s=%.500s, %s=%lu, %s=%lu: %.750s",
 				 _("accept"), _("host"),
 				 (state->ipaddr ==
 				  NULL ? "???" : state->ipaddr),
@@ -332,13 +340,14 @@ static int smtp_processline__dataend(ppsmtp_t state)
 				  NULL ? "???" : state->helo), _("from"),
 				 (state->sender ==
 				  NULL ? "???" : state->sender), _("to"),
-				 (state->recipient ==
-				  NULL ? "???" : state->recipient),
+				 (state->recipients ==
+				  NULL ? "???" : state->recipients),
+				 _("rcpts"), state->recipientcount,
 				 _("size"), messagesize,
 				 _("filter failed"));
 		} else {
 			log_line(LOGPRI_INFO,
-				 "%s: %s=%.40s (%.60s), %s=%.99s, %s=%.99s, %s=%lu: %.200s",
+				 "%s: %s=%.40s (%.60s), %s=%.99s, %s=%.500s, %s=%lu, %s=%lu: %.750s",
 				 _("accept"), _("host"),
 				 (state->ipaddr ==
 				  NULL ? "???" : state->ipaddr),
@@ -346,8 +355,9 @@ static int smtp_processline__dataend(ppsmtp_t state)
 				  NULL ? "???" : state->helo), _("from"),
 				 (state->sender ==
 				  NULL ? "???" : state->sender), _("to"),
-				 (state->recipient ==
-				  NULL ? "???" : state->recipient),
+				 (state->recipients ==
+				  NULL ? "???" : state->recipients),
+				 _("rcpts"), state->recipientcount,
 				 _("size"), messagesize,
 				 _("filter passed"));
 		}
@@ -655,9 +665,45 @@ static void smtp_processline__mailfrom(ppsmtp_t state)
  */
 static void smtp_processline__rcptto(ppsmtp_t state)
 {
-	if (state->recipient != NULL)
-		return;
-	state->recipient = smtp_processline__getaddress(state);
+	char *rcptto;
+
+	int len;
+	char *ptr;
+
+	state->recipientcount++;
+
+	if ((state->recipients == NULL) ||
+	    (strlen(state->recipients) < 500)) {
+
+		rcptto = smtp_processline__getaddress(state);
+
+		if (rcptto == NULL)
+			return;
+
+		if (state->recipient == NULL) {
+			state->recipient = strdup(rcptto);
+		}
+
+		if (state->recipients == NULL) {
+			state->recipients = rcptto;
+			return;
+		}
+
+		len = strlen(state->recipients) + strlen(rcptto) + 2;	/* recipient + ',' + rcptto + NUL */
+
+		ptr = realloc(state->recipients, len);	/* RATS: ignore (OK) */
+		if (ptr != NULL) {
+			strcat(ptr, ",");   /* RATS: ignore (checked) */
+			strcat(ptr, rcptto);	/* RATS: ignore (checked) */
+			state->recipients = ptr;
+
+			if (len > 500)
+				strcpy(state->recipients + 496, "...");
+		}
+
+		free(rcptto);		    /* if we got here, we've copied it so this one can be freed */
+	}
+	return;
 }
 
 

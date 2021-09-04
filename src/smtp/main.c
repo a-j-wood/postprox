@@ -45,6 +45,8 @@ int smtp_main(opts_t opts, int infdr, int infdw, int outfdr, int outfdw)
 	state.helo = NULL;
 	state.sender = NULL;
 	state.recipient = NULL;
+	state.recipients = NULL;
+	state.recipientcount = 0;
 
 	/*
 	 * If no output server FDs were given, connect to the output server
@@ -163,6 +165,8 @@ int smtp_main(opts_t opts, int infdr, int infdw, int outfdr, int outfdw)
 		free(state.sender);
 	if (state.recipient != NULL)
 		free(state.recipient);
+	if (state.recipients != NULL)
+		free(state.recipients);
 
 #ifdef DEBUG
 	if (opts->debug > 0)

@@ -4,8 +4,8 @@
  * Copyright 2006 Andrew Wood, distributed under the Artistic License.
  */
 
-#ifndef _SMTP_INTERNAL_H
-#define _SMTP_INTERNAL_H 1
+#ifndef IV_SMTP_INTERNAL_H
+#define IV_SMTP_INTERNAL_H 1
 
 #ifndef _TIME_H
 #include <time.h>
@@ -33,6 +33,8 @@ struct ppsmtp_s {
 	char *helo;		/* HELO passed via XFORWARD */
 	char *sender;		/* envelope sender, given in MAIL FROM */
 	char *recipient;	/* first recipient, given in RCPT TO */
+	char *recipients;	/* all recipient, given in RCPT TO */
+	int recipientcount;	/* count of recipients, given in RCPT TO */
 };
 
 typedef struct ppsmtp_s *ppsmtp_t;
@@ -40,6 +42,6 @@ typedef struct ppsmtp_s *ppsmtp_t;
 int smtp_write_out(ppsmtp_t, char *, int);
 int smtp_write_in(ppsmtp_t, char *, int);
 
-#endif /* _SMTP_INTERNAL_H */
+#endif /* IV_SMTP_INTERNAL_H */
 
 /* EOF */

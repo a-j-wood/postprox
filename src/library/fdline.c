@@ -18,9 +18,9 @@ struct fdline_s {
 	int fd;				 /* file descriptor for line */
 	char buf[1024];			 /* RATS: ignore (checked) - line buf */
 	int bufused;			 /* number of bytes used in buffer */
-	unsigned char lineready;	 /* set if a line is pre-buffered */
-	unsigned char linestart;	 /* set if returned line is at start */
-	unsigned char fd_eof;		 /* set if file descriptor is at EOF */
+	int lineready;			 /* set if a line is pre-buffered */
+	int linestart;			 /* set if returned line is at start */
+	int fd_eof;			 /* set if file descriptor is at EOF */
 };
 
 
@@ -32,7 +32,7 @@ fdline_t fdline_open(int fd)
 {
 	fdline_t line;
 
-	line = calloc(1, sizeof(*line));
+	line = calloc((size_t) 1, sizeof(*line));
 	if (line == NULL)
 		return NULL;
 
@@ -85,7 +85,7 @@ int fdline_read_eof(fdline_t line)
 		return 1;
 	if (line->fd_eof == 0)
 		return 0;
-	if (line->lineready)
+	if (line->lineready != 0)
 		return 0;
 	return 1;
 }
@@ -132,7 +132,8 @@ int fdline_read(fdline_t line, char *outbuf, int bufsize, int *startline)
 	int linelen;
 	char *ptr;
 
-	outbuf[0] = 0;
+	outbuf[0] = '\0';
+	linelen = 0;
 
 	if (line == NULL)
 		return 0;
@@ -142,7 +143,7 @@ int fdline_read(fdline_t line, char *outbuf, int bufsize, int *startline)
 	 * data.
 	 */
 	if ((line->lineready == 0) && (line->fd_eof == 0)) {
-		int amountread;
+		ssize_t amountread;
 
 		amountread = read(line->fd, /* RATS: ignore (checked) */
 				  line->buf + line->bufused,
@@ -165,7 +166,7 @@ int fdline_read(fdline_t line, char *outbuf, int bufsize, int *startline)
 				 _("error reading from fd %d: %s"),
 				 line->fd, strerror(errno));
 			line->fd_eof = 1;
-			return amountread;
+			return (int) amountread;
 		}
 
 		if (amountread == 0) {
@@ -175,7 +176,7 @@ int fdline_read(fdline_t line, char *outbuf, int bufsize, int *startline)
 		line->bufused += amountread;
 	}
 
-	if (startline)
+	if (startline != NULL)
 		*startline = line->linestart;
 
 	/*
@@ -183,11 +184,11 @@ int fdline_read(fdline_t line, char *outbuf, int bufsize, int *startline)
 	 * either there isn't a full line to read yet, or we've filled the
 	 * buffer, so we have to return a partial line.
 	 */
-	ptr = memchr(line->buf, '\n', line->bufused);
+	ptr = memchr(line->buf, (int) '\n', (size_t) (line->bufused));
 	if (ptr == NULL) {
-		if (line->fd_eof) {
+		if (line->fd_eof != 0) {
 			linelen = line->bufused;
-		} else if (line->bufused < sizeof(line->buf)) {
+		} else if (line->bufused < (int) sizeof(line->buf)) {
 			/*
 			 * We've not yet filled the buffer, so return 0
 			 * while we wait for more data to come in.
@@ -226,8 +227,8 @@ int fdline_read(fdline_t line, char *outbuf, int bufsize, int *startline)
 	 * returning, we have to recalculate whether the line after this
 	 * will start at the start of the line or not.
 	 */
-	memcpy(outbuf, line->buf, linelen);
-	outbuf[linelen] = 0;
+	memcpy(outbuf, line->buf, (size_t) linelen);
+	outbuf[linelen] = '\0';
 
 	/*
 	 * Work out whether or not the next line we read after this one will
@@ -235,7 +236,7 @@ int fdline_read(fdline_t line, char *outbuf, int bufsize, int *startline)
 	 * the next line according to whether the line we're returning now
 	 * contains a newline.
 	 */
-	ptr = memchr(outbuf, '\n', linelen);
+	ptr = memchr(outbuf, (int) '\n', (size_t) linelen);
 	line->linestart = (ptr == NULL) ? 0 : 1;
 
 	/*
@@ -244,7 +245,7 @@ int fdline_read(fdline_t line, char *outbuf, int bufsize, int *startline)
 	 */
 	if (linelen < line->bufused) {
 		memmove(line->buf, line->buf + linelen,
-			line->bufused - linelen);
+			(size_t) (line->bufused - linelen));
 	}
 	line->bufused -= linelen;
 
@@ -254,12 +255,14 @@ int fdline_read(fdline_t line, char *outbuf, int bufsize, int *startline)
 	 */
 	line->lineready = 0;
 	if (line->bufused > 0) {
-		ptr = memchr(line->buf, '\n', line->bufused);
-		if (ptr)
+		ptr =
+		    memchr(line->buf, (int) '\n',
+			   (size_t) (line->bufused));
+		if (ptr != NULL)
 			line->lineready = 1;
 	}
 
-	if (line->bufused >= sizeof(line->buf))
+	if (line->bufused >= (int) sizeof(line->buf))
 		line->lineready = 1;
 
 	return linelen;

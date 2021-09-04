@@ -24,6 +24,7 @@ struct optdesc_s {
  */
 void display_help(void)
 {
+	/*@ -staticinittrans -readonlytrans -observertrans -nullassign @ */
 	struct optdesc_s optlist[] = {
 		{"-c", "--command", _("COMMAND"),
 		 _("use COMMAND as the filtering command")},
@@ -31,24 +32,24 @@ void display_help(void)
 		 _("use DIR for temporary files instead of /tmp")},
 		{"-t", "--timeout", "TIMEOUT",
 		 _("filter timeout TIMEOUT sec instead of 30")},
-		{"-r", "--reject", 0,
+		{"-r", "--reject", NULL,
 		 _("reject mail with 451 if filter fails to run")},
-		{"-v", "--verbose", 0,
+		{"-v", "--verbose", NULL,
 		 _("more verbose logging")},
 		{"-l", "--listen", _("[IP:]PORT"),
 		 _("listen on PORT instead of using stdin/out")},
 #ifdef DEBUG
-		{"-D", "--debug", 0,
+		{"-D", "--debug", NULL,
 		 _("enable debugging output")},
 #endif
-		{"", 0, 0, 0},
-		{"-h", "--help", 0,
+		{"", NULL, NULL, NULL},
+		{"-h", "--help", NULL,
 		 _("show this help and exit")},
-		{"-L", "--license", 0,
+		{"-L", "--license", NULL,
 		 _("show this program's license")},
-		{"-V", "--version", 0,
+		{"-V", "--version", NULL,
 		 _("show version information and exit")},
-		{0, 0, 0, 0}
+		{NULL, NULL, NULL, NULL}
 	};
 	int i, col1max = 0, tw = 77;
 	char *optbuf;
@@ -60,15 +61,15 @@ void display_help(void)
 	       ("Read SMTP on standard input, proxying to another SMTP server, "
 		"with filtering."));
 
-	for (i = 0; optlist[i].optshort; i++) {
+	for (i = 0; optlist[i].optshort != NULL; i++) {
 		int width = 0;
 
-		width = 2 + strlen(optlist[i].optshort);	/* RATS: ignore */
+		width = 2 + (int) strlen(optlist[i].optshort);	/* RATS: ignore */
 #ifdef HAVE_GETOPT_LONG
-		if (optlist[i].optlong)
+		if (optlist[i].optlong != NULL)
 			width += 2 + strlen(optlist[i].optlong);	/* RATS: ignore */
 #endif
-		if (optlist[i].param)
+		if (optlist[i].param != NULL)
 			width += 1 + strlen(optlist[i].param);	/* RATS: ignore */
 
 		if (width > col1max)
@@ -77,31 +78,36 @@ void display_help(void)
 
 	col1max++;
 
-	optbuf = malloc(col1max + 16);
+	optbuf = malloc((size_t) (col1max + 16));
 	if (optbuf == NULL) {
 		fprintf(stderr, "%s: %s\n", PROGRAM_NAME, strerror(errno));
-		exit(1);
+		exit(EXIT_FAILURE);
 	}
 
-	for (i = 0; optlist[i].optshort; i++) {
+	for (i = 0; optlist[i].optshort != NULL; i++) {
 		char *start;
 		char *end;
 
-		if (optlist[i].optshort[0] == 0) {
+		if (optlist[i].optshort[0] == '\0') {
 			printf("\n");
 			continue;
 		}
-
-		sprintf(optbuf, "%s%s%s%s%s",	/* RATS: ignore (checked) */
-			optlist[i].optshort,
-#ifdef HAVE_GETOPT_LONG
-			optlist[i].optlong ? ", " : "",
-			optlist[i].optlong ? optlist[i].optlong : "",
+#ifdef HAVE_SNPRINTF
+		(void) snprintf(optbuf, (size_t) (col1max + 16),
 #else
-			"", "",
+		(void) sprintf(optbuf,	    /* RATS: ignore */
 #endif
-			optlist[i].param ? " " : "",
-			optlist[i].param ? optlist[i].param : "");
+			       "%s%s%s%s%s", optlist[i].optshort,
+#ifdef HAVE_GETOPT_LONG
+			       optlist[i].optlong != NULL ? ", " : "",
+			       optlist[i].optlong !=
+			       NULL ? optlist[i].optlong : "",
+#else
+			       "", "",
+#endif
+			       optlist[i].param != NULL ? " " : "",
+			       optlist[i].param !=
+			       NULL ? optlist[i].param : "");
 
 		printf("  %-*s ", col1max - 2, optbuf);
 
@@ -112,7 +118,8 @@ void display_help(void)
 
 		start = optlist[i].description;
 
-		while (strlen(start) /* RATS: ignore */ >tw - col1max) {
+		while (strlen(start)	    /* RATS: ignore */
+		       >(size_t) (tw - col1max)) {
 			end = start + tw - col1max;
 			while ((end > start) && (end[0] != ' '))
 				end--;

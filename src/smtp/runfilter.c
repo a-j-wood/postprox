@@ -27,16 +27,23 @@
  */
 static void smtp_runfilter__child(char *command, char *file, char *outfile,
 				  int errfd, char *ipaddr, char *helo,
-				  char *sender, char *recipient)
+				  char *sender, char *recipient,
+				  char *recipients, int recipientcount)
 {
 	char *varname[] =
-	    { "EMAIL", "OUTFILE", "REMOTEIP", "HELO", "SENDER",
-		"RECIPIENT", NULL
+	    { "RECIPIENTCOUNT", "EMAIL", "OUTFILE", "REMOTEIP", "HELO",
+		"SENDER", "RECIPIENT", "RECIPIENTS", NULL
 	};
 	char *varval[] =
-	    { file, outfile, ipaddr, helo, sender, recipient, NULL };
+	    { NULL, file, outfile, ipaddr, helo, sender, recipient,
+		recipients, NULL
+	};
+	char rcbuf[64];			 /* RATS: ignore (snprintf) */
 	char *envvar;
 	int nullfdw, nullfdr, i;
+
+	snprintf(rcbuf, sizeof(rcbuf), "%d", recipientcount);
+	varval[0] = rcbuf;
 
 	for (i = 0; varname[i] != NULL; i++) {
 		if (varval[i] == NULL) {
@@ -88,7 +95,7 @@ static void smtp_runfilter__child(char *command, char *file, char *outfile,
 	}
 	close(errfd);
 
-	execl("/bin/sh", "sh", "-c", command, 0);
+	execl("/bin/sh", "sh", "-c", command, NULL);
 
 	log_line(LOGPRI_ERROR, _("failed to run command [%s]: %s"),
 		 command, strerror(errno));
@@ -117,7 +124,7 @@ static void smtp_runfilter__sigalrm(int s)
  */
 int smtp_runfilter(opts_t opts, char *file, char *outfile, char *errbuf,
 		   int bufsize, char *ipaddr, char *helo, char *sender,
-		   char *recipient)
+		   char *recipient, char *recipients, int recipientcount)
 {
 	char *errfile;
 	int errfd;
@@ -168,7 +175,8 @@ int smtp_runfilter(opts_t opts, char *file, char *outfile, char *errbuf,
 	} else if (child == 0) {
 		smtp_runfilter__child(opts->filtercommand, file, outfile,
 				      errfd, ipaddr, helo, sender,
-				      recipient);
+				      recipient, recipients,
+				      recipientcount);
 		exit(0);
 	}
 

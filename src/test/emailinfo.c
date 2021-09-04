@@ -19,33 +19,39 @@
 #include <unistd.h>
 
 
-int smtp_main(opts_t, int, int, int, int);
+/*@ -redecl @*/
+extern int smtp_main(opts_t, int, int, int, int);
+
+/*@ -mustfreeonly -compmempass @*/
 
 
 /*
  * Return nonzero if the next line in fptr doesn't match the given string
  * (checking only up to the first 99 characters).
  */
-int test_proxyinfo_checkline(FILE * fptr, char *str)
+static int test_proxyinfo_checkline( /*@null@ */ FILE * fptr, char *str)
 {
 	char linebuf[256];		 /* RATS: ignore (OK) */
 	char *ptr;
 
-	linebuf[0] = 0;
-	linebuf[sizeof(linebuf) - 1] = 0;
-	fgets(linebuf, sizeof(linebuf) - 1, fptr);
+	if (fptr == NULL)
+		return 1;
+
+	linebuf[0] = '\0';
+	linebuf[sizeof(linebuf) - 1] = '\0';
+	(void) fgets(linebuf, (int) (sizeof(linebuf) - 1), fptr);
 
 	ptr = strchr(linebuf, '\n');
-	if (ptr)
-		ptr[0] = 0;
+	if (ptr != NULL)
+		ptr[0] = '\0';
 
-	if (strlen(str) < 99) {
+	if (strlen(str) < (size_t) 99) {
 		if (strcmp(str, linebuf) == 0)
 			return 0;
 		return 1;
 	}
 
-	if (strncmp(str, linebuf, 99) == 0)
+	if (strncmp(str, linebuf, (size_t) 99) == 0)
 		return 0;
 	return 1;
 }
@@ -56,8 +62,8 @@ int test_proxyinfo_checkline(FILE * fptr, char *str)
  * proxy end up in the filter's environment correctly with the first 99
  * characters intact.  Returns nonzero on failure.
  */
-int test_proxyinfo(opts_t opts, char *ipaddr, char *helo, char *sender,
-		   char *recipient)
+static int test_proxyinfo(opts_t opts, char *ipaddr, char *helo,
+			  char *sender, char *recipient)
 {
 	char filterfile[256];		 /* RATS: ignore (OK) */
 	char filteroutfile[256];	 /* RATS: ignore (OK) */
@@ -67,94 +73,66 @@ int test_proxyinfo(opts_t opts, char *ipaddr, char *helo, char *sender,
 	int outsrv_wfd;
 	int insrv_rfd[2];
 	int outsrv_rfd[2];
-	pid_t child;
+	pid_t child, wret;
 	int status;
 	int ret;
 
-	if (pipe(insrv_rfd)) {
-		return 1;
-	}
+	memset(filterfile, 0, sizeof(filterfile));
+	memset(filteroutfile, 0, sizeof(filteroutfile));
+	filterfd = -1;
+	filteroutfd = -1;
+	insrv_wfd = -1;
+	outsrv_wfd = -1;
+	insrv_rfd[0] = -1;
+	insrv_rfd[1] = -1;
+	outsrv_rfd[0] = -1;
+	outsrv_rfd[1] = -1;
+	fptr = NULL;
+	child = 0;
+	ret = 0;
 
-	if (pipe(outsrv_rfd)) {
-		close(insrv_rfd[0]);
-		close(insrv_rfd[1]);
-		return 1;
-	}
+	FAIL_IF(pipe(insrv_rfd) != 0);
+	FAIL_IF(pipe(outsrv_rfd) != 0);
 
 	insrv_wfd = open("/dev/null", O_WRONLY);
-	if (insrv_wfd < 0) {
-		close(insrv_rfd[0]);
-		close(insrv_rfd[1]);
-		close(outsrv_rfd[0]);
-		close(outsrv_rfd[1]);
-		return 1;
-	}
+	FAIL_IF(insrv_wfd < 0);
 
 	outsrv_wfd = open("/dev/null", O_WRONLY);
-	if (outsrv_wfd < 0) {
-		close(insrv_rfd[0]);
-		close(insrv_rfd[1]);
-		close(outsrv_rfd[0]);
-		close(outsrv_rfd[1]);
-		close(insrv_wfd);
-		return 1;
-	}
+	FAIL_IF(outsrv_wfd < 0);
 
-	if (test_tmpfd(filterfile, sizeof(filterfile), &filterfd)) {
-		close(insrv_rfd[0]);
-		close(insrv_rfd[1]);
-		close(outsrv_rfd[0]);
-		close(outsrv_rfd[1]);
-		close(insrv_wfd);
-		close(outsrv_wfd);
-		return 1;
-	}
+	FAIL_IF(test_tmpfd(filterfile, (int) sizeof(filterfile), &filterfd)
+		!= 0);
+	FAIL_IF(test_tmpfd
+		(filteroutfile, (int) sizeof(filteroutfile),
+		 &filteroutfd) != 0);
 
-	if (test_tmpfd(filteroutfile, sizeof(filteroutfile), &filteroutfd)) {
-		close(insrv_rfd[0]);
-		close(insrv_rfd[1]);
-		close(outsrv_rfd[0]);
-		close(outsrv_rfd[1]);
-		close(insrv_wfd);
-		close(outsrv_wfd);
-		close(filterfd);
-		remove(filterfile);
-		return 1;
-	}
+	FAIL_IF(test_fdprintf(filterfd, "#!/bin/sh\n") != 0);
+	FAIL_IF(test_fdprintf
+		(filterfd, "echo \"$REMOTEIP\" >> %s\n",
+		 filteroutfile) != 0);
+	FAIL_IF(test_fdprintf
+		(filterfd, "echo \"$HELO\" >> %s\n", filteroutfile) != 0);
+	FAIL_IF(test_fdprintf
+		(filterfd, "echo \"$SENDER\" >> %s\n",
+		 filteroutfile) != 0);
+	FAIL_IF(test_fdprintf
+		(filterfd, "echo \"$RECIPIENT\" >> %s\n",
+		 filteroutfile) != 0);
+	FAIL_IF(test_fdprintf(filterfd, "exit 0\n") != 0);
 
-	test_fdprintf(filterfd, "#!/bin/sh\n");
-	test_fdprintf(filterfd, "echo \"$REMOTEIP\" >> %s\n",
-		      filteroutfile);
-	test_fdprintf(filterfd, "echo \"$HELO\" >> %s\n", filteroutfile);
-	test_fdprintf(filterfd, "echo \"$SENDER\" >> %s\n", filteroutfile);
-	test_fdprintf(filterfd, "echo \"$RECIPIENT\" >> %s\n",
-		      filteroutfile);
-	test_fdprintf(filterfd, "exit 0\n");
+	FAIL_IF(close(filterfd) != 0);
+	FAIL_IF(close(filteroutfd) != 0);
 
-	close(filterfd);
-	close(filteroutfd);
-
-	chmod(filterfile, S_IRUSR | S_IWUSR | S_IXUSR);
+	FAIL_IF(chmod(filterfile, S_IRUSR | S_IWUSR | S_IXUSR) != 0);
 
 	child = fork();
-
-	if (child < 0) {
-		close(insrv_rfd[0]);
-		close(insrv_rfd[1]);
-		close(outsrv_rfd[0]);
-		close(outsrv_rfd[1]);
-		close(insrv_wfd);
-		close(outsrv_wfd);
-		remove(filterfile);
-		remove(filteroutfile);
-		return 1;
-	}
+	FAIL_IF(child < 0);
 
 	if (child == 0) {
 		int childret;
 
-		close(insrv_rfd[1]);
-		close(outsrv_rfd[1]);
+		(void) close(insrv_rfd[1]);
+		(void) close(outsrv_rfd[1]);
 
 		opts->filtercommand = filterfile;
 
@@ -162,73 +140,93 @@ int test_proxyinfo(opts_t opts, char *ipaddr, char *helo, char *sender,
 		    smtp_main(opts, insrv_rfd[0], insrv_wfd, outsrv_rfd[0],
 			      outsrv_wfd);
 
-		close(insrv_rfd[0]);
-		close(outsrv_rfd[0]);
-		close(insrv_wfd);
-		close(outsrv_wfd);
+		(void) close(insrv_rfd[0]);
+		(void) close(outsrv_rfd[0]);
+		(void) close(insrv_wfd);
+		(void) close(outsrv_wfd);
 
 		exit(childret);
 	}
 
-	close(insrv_rfd[0]);
-	close(outsrv_rfd[0]);
+	FAIL_IF(close(insrv_rfd[0]) != 0);
+	insrv_rfd[0] = -1;
+	FAIL_IF(close(outsrv_rfd[0]) != 0);
+	outsrv_rfd[0] = -1;
 
-	test_fdprintf(outsrv_rfd[1], "%s\r\n", "220 test ESMTP");
-	test_fdprintf(insrv_rfd[1], "%s\r\n", "HELO me");
-	test_fdprintf(outsrv_rfd[1], "%s\r\n", "250 test");
-	test_fdprintf(insrv_rfd[1],
-		      "XFORWARD FOO=BAR ADDR=%s HELO=%s TEST=xxx\r\n",
-		      ipaddr, helo);
-	test_fdprintf(outsrv_rfd[1], "%s\r\n", "250 test");
+	FAIL_IF(test_fdprintf(outsrv_rfd[1], "%s\r\n", "220 test ESMTP") !=
+		0);
+	FAIL_IF(test_fdprintf(insrv_rfd[1], "%s\r\n", "HELO me") != 0);
+	FAIL_IF(test_fdprintf(outsrv_rfd[1], "%s\r\n", "250 test") != 0);
+	FAIL_IF(test_fdprintf
+		(insrv_rfd[1],
+		 "XFORWARD FOO=BAR ADDR=%s HELO=%s TEST=xxx\r\n", ipaddr,
+		 helo) != 0);
+	FAIL_IF(test_fdprintf(outsrv_rfd[1], "%s\r\n", "250 test") != 0);
 
-	test_fdprintf(insrv_rfd[1], "MAIL FROM:<%s>\r\n", sender);
-	test_fdprintf(outsrv_rfd[1], "%s\r\n", "250 OK");
+	FAIL_IF(test_fdprintf(insrv_rfd[1], "MAIL FROM:<%s>\r\n", sender)
+		!= 0);
+	FAIL_IF(test_fdprintf(outsrv_rfd[1], "%s\r\n", "250 OK") != 0);
 
-	test_fdprintf(insrv_rfd[1], "RCPT TO:<%s>\r\n", recipient);
-	test_fdprintf(outsrv_rfd[1], "%s\r\n", "250 OK");
+	FAIL_IF(test_fdprintf(insrv_rfd[1], "RCPT TO:<%s>\r\n", recipient)
+		!= 0);
+	FAIL_IF(test_fdprintf(outsrv_rfd[1], "%s\r\n", "250 OK") != 0);
 
-	test_fdprintf(insrv_rfd[1], "RCPT TO:<junk@junk.junk>\r\n");
-	test_fdprintf(outsrv_rfd[1], "%s\r\n", "250 OK");
+	FAIL_IF(test_fdprintf(insrv_rfd[1], "RCPT TO:<junk@junk.junk>\r\n")
+		!= 0);
+	FAIL_IF(test_fdprintf(outsrv_rfd[1], "%s\r\n", "250 OK") != 0);
 
-	test_fdprintf(insrv_rfd[1], "%s\r\n", "DATA");
+	FAIL_IF(test_fdprintf(insrv_rfd[1], "%s\r\n", "DATA") != 0);
 
-	test_fdprintf(insrv_rfd[1], "%s\r\n", "blank");
+	FAIL_IF(test_fdprintf(insrv_rfd[1], "%s\r\n", "blank") != 0);
 
-	test_fdprintf(insrv_rfd[1], "%s\r\n", ".");
-	test_fdprintf(outsrv_rfd[1], "%s\r\n",
-		      "354 End data with <CR><LF>.<CR><LF>");
-	test_fdprintf(outsrv_rfd[1], "%s\r\n", "250 OK sent");
+	FAIL_IF(test_fdprintf(insrv_rfd[1], "%s\r\n", ".") != 0);
+	FAIL_IF(test_fdprintf
+		(outsrv_rfd[1], "%s\r\n",
+		 "354 End data with <CR><LF>.<CR><LF>") != 0);
+	FAIL_IF(test_fdprintf(outsrv_rfd[1], "%s\r\n", "250 OK sent") !=
+		0);
 
-	test_fdprintf(outsrv_rfd[1], "%s\r\n", "221 Bye");
+	FAIL_IF(test_fdprintf(outsrv_rfd[1], "%s\r\n", "221 Bye") != 0);
 
-	close(insrv_rfd[1]);
-	close(outsrv_rfd[1]);
+	FAIL_IF(close(insrv_rfd[1]) != 0);
+	insrv_rfd[1] = -1;
+	FAIL_IF(close(outsrv_rfd[1]) != 0);
+	outsrv_rfd[1] = -1;
 
-	waitpid(child, &status, 0);
+	wret = waitpid(child, &status, 0);
+	FAIL_IF(wret != child);
 
-	close(insrv_wfd);
-	close(outsrv_wfd);
+	FAIL_IF(close(insrv_wfd) != 0);
+	insrv_wfd = -1;
+	FAIL_IF(close(outsrv_wfd) != 0);
+	outsrv_wfd = -1;
 
-	remove(filterfile);
+	FAIL_IF(remove(filterfile) != 0);
+	filterfile[0] = '\0';
 
 	fptr = fopen(filteroutfile, "r");
-	if (fptr == NULL) {
-		remove(filteroutfile);
-		return 1;
-	}
+	FAIL_IF(fptr == NULL);
 
-	ret = 0;
-	if (test_proxyinfo_checkline(fptr, ipaddr))
-		ret = 1;
-	if (test_proxyinfo_checkline(fptr, helo))
-		ret = 1;
-	if (test_proxyinfo_checkline(fptr, sender))
-		ret = 1;
-	if (test_proxyinfo_checkline(fptr, recipient))
-		ret = 1;
+	FAIL_IF(test_proxyinfo_checkline(fptr, ipaddr) != 0);
+	FAIL_IF(test_proxyinfo_checkline(fptr, helo) != 0);
+	FAIL_IF(test_proxyinfo_checkline(fptr, sender) != 0);
+	FAIL_IF(test_proxyinfo_checkline(fptr, recipient) != 0);
 
-	fclose(fptr);
-	remove(filteroutfile);
+	FAIL_IF(fptr == NULL || fclose(fptr) != 0);
+	fptr = NULL;
+	FAIL_IF(remove(filteroutfile) != 0);
+	filteroutfile[0] = '\0';
+
+      end:
+	CLOSE_IF_VALID(insrv_rfd[0]);
+	CLOSE_IF_VALID(insrv_rfd[1]);
+	CLOSE_IF_VALID(outsrv_rfd[0]);
+	CLOSE_IF_VALID(outsrv_rfd[1]);
+	CLOSE_IF_VALID(insrv_wfd);
+	CLOSE_IF_VALID(outsrv_wfd);
+	FCLOSE_IF_VALID(fptr);
+	REMOVE_IF_VALID(filterfile);
+	REMOVE_IF_VALID(filteroutfile);
 
 	return ret;
 }
@@ -253,24 +251,25 @@ int test_email_info_oversized(opts_t opts)
 	char buf2[4096];		 /* RATS: ignore */
 	char buf3[4096];		 /* RATS: ignore */
 	char buf4[4096];		 /* RATS: ignore */
-	int len, i;
+	int len, i, ret;
 
-	srand(1234);			    /* RATS: ignore (predictable) */
+	srand((unsigned int) 1234);	    /* RATS: ignore (predictable) */
 	for (len = 10; len < 800;
 	     len += (1 + rand() % (len < 100 ? 15 : 63))) {
 		printf("%-4d\b\b\b\b", len);
 		for (i = 0; i < len; i++) {
-			buf1[i] = 'A' + rand() % 31;
-			buf2[i] = 'A' + rand() % 31;
-			buf3[i] = 'A' + rand() % 31;
-			buf4[i] = 'A' + rand() % 31;
+			buf1[i] = (char) ((int) 'A' + rand() % 31);
+			buf2[i] = (char) ((int) 'A' + rand() % 31);
+			buf3[i] = (char) ((int) 'A' + rand() % 31);
+			buf4[i] = (char) ((int) 'A' + rand() % 31);
 		}
-		buf1[i] = 0;
-		buf2[i] = 0;
-		buf3[i] = 0;
-		buf4[i] = 0;
-		if (test_proxyinfo(opts, buf1, buf2, buf3, buf4))
-			return 1;
+		buf1[i] = '\0';
+		buf2[i] = '\0';
+		buf3[i] = '\0';
+		buf4[i] = '\0';
+		ret = test_proxyinfo(opts, buf1, buf2, buf3, buf4);
+		if (ret != 0)
+			return ret;
 	}
 
 	/*
@@ -286,16 +285,16 @@ int test_email_info_oversized(opts_t opts)
 	for (len = 900; len < 3000; len += (1 + rand() % 1023)) {
 		printf("%-4d\b\b\b\b", len);
 		for (i = 0; i < len; i++) {
-			buf1[i] = 'A' + rand() % 31;
-			buf2[i] = 'A' + rand() % 31;
-			buf3[i] = 'A' + rand() % 31;
-			buf4[i] = 'A' + rand() % 31;
+			buf1[i] = (char) ((int) 'A' + rand() % 31);
+			buf2[i] = (char) ((int) 'A' + rand() % 31);
+			buf3[i] = (char) ((int) 'A' + rand() % 31);
+			buf4[i] = (char) ((int) 'A' + rand() % 31);
 		}
-		buf1[i] = 0;
-		buf2[i] = 0;
-		buf3[i] = 0;
-		buf4[i] = 0;
-		test_proxyinfo(opts, buf1, buf2, buf3, buf4);
+		buf1[i] = '\0';
+		buf2[i] = '\0';
+		buf3[i] = '\0';
+		buf4[i] = '\0';
+		ret = test_proxyinfo(opts, buf1, buf2, buf3, buf4);
 	}
 
 	printf("    \b\b\b\b");

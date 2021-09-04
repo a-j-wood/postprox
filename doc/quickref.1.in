@@ -249,6 +249,15 @@ envelope recipient (SMTP RCPT TO) of the email, if known.  Only the first
 recipient given is put into this variable.  If the envelope recipient is not
 known, this variable will be a blank string.
 .TP
+.B RECIPIENTS
+A comma-separated list of recipients (SMTP RCPT TO), if known.  If the list
+would be more than 500 bytes long, it is truncated, and the point of
+truncation is marked with "...".  If no recipients are known, this variable
+will be a blank string.
+.TP
+.B RECIPIENTCOUNT
+The number of recipients (SMTP RCPT TO) that the message has.
+.TP
 .B REMOTEIP
 The IP address of the sending server, as collected from the SMTP XFORWARD
 command.  If not known, this variable will be a blank string.
@@ -273,17 +282,26 @@ Also note that everything but
 .B EMAIL
 and
 .B OUTFILE
-will be truncated to a maximum of 99 characters.
+will be truncated to a maximum of 99 characters, and
+.B RECIPIENTS
+will be truncated to 500 characters.
 
-.SH AUTHOR
+.SH AUTHORS
 
-The author:
-
-.RS
 Andrew Wood <andrew.wood@ivarch.com>
 .br
 .I http://www.ivarch.com/
-.RE
+
+Graham Maltby
+.br
+(Patch for extended recipients logging, longer filter messages)
+
+Jeremy Fitzhardinge
+.br
+(Detailed report and analysis of input/output sync problem)
+.br
+.I http://www.goop.org/~jeremy/
+
 
 Project home page:
 

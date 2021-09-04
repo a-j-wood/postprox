@@ -22,6 +22,8 @@ struct ppnetfd_s {
 };
 
 
+/*@ -usedef -type @*/
+
 /*
  * Open a connection to the given server, and return a ppnetfd_t structure
  * describing it, or NULL on error. If an error occurs, the calling function
@@ -41,8 +43,8 @@ ppnetfd_t connection_open(const char *host, unsigned short port)
 		return NULL;
 	strcpy(hostname, host);		    /* RATS: ignore (checked) */
 	ptr = strchr(hostname, ':');
-	if (ptr)
-		*ptr = 0;
+	if (ptr != NULL)
+		*ptr = '\0';
 
 	hostinfo = gethostbyname(hostname); /* RATS: ignore (unavoidable) */
 	free(hostname);
@@ -58,18 +60,23 @@ ppnetfd_t connection_open(const char *host, unsigned short port)
 		return NULL;
 
 	if (connect(sock, (struct sockaddr *) (&addr), sizeof(addr)) < 0) {
-		close(sock);
+		(void) close(sock);
 		return NULL;
 	}
 
-	connection = calloc(1, sizeof(*connection));
+	connection = calloc((size_t) 1, sizeof(*connection));
 	if (connection == NULL) {
-		shutdown(sock, SHUT_RDWR);
-		close(sock);
+		(void) shutdown(sock, SHUT_RDWR);
+		(void) close(sock);
 		return NULL;
 	}
 
-	fcntl(sock, F_SETFD, FD_CLOEXEC);   /* set close-on-exec */
+	if (fcntl(sock, F_SETFD, FD_CLOEXEC) != 0) {	/* set close-on-exec */
+		free(connection);
+		(void) shutdown(sock, SHUT_RDWR);
+		(void) close(sock);
+		return NULL;
+	}
 
 	connection->fd = sock;
 
@@ -84,8 +91,8 @@ void connection_close(ppnetfd_t connection)
 {
 	if (connection == NULL)
 		return;
-	shutdown(connection->fd, SHUT_RDWR);
-	close(connection->fd);
+	(void) shutdown(connection->fd, SHUT_RDWR);
+	(void) close(connection->fd);
 	free(connection);
 }
 

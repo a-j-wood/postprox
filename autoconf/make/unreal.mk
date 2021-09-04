@@ -3,7 +3,7 @@
 #
 
 .PHONY: all help dep depend depclean make \
-  check test memtest rats neat \
+  check test memtest rats splint neat \
   clean distclean cvsclean \
   index manhtml indent indentclean \
   changelog doc dist release \
@@ -37,6 +37,7 @@ help:
 	@echo '  changelog       generate doc/changelog from CVS log info'
 	@echo
 	@echo '  memtest         run "make test" using valgrind to find faults'
+	@echo '  splint          run "splint" to find potential faults'
 	@echo '  rats            run "rats" to find potential faults'
 	@echo '  neat            do indent indentclean all test memtest rats'
 	@echo
@@ -164,6 +165,13 @@ memtest: $(package)-test
 	 exit 1; \
 	)
 	@echo No errors were found by valgrind.
+
+splint:
+	@which splint >/dev/null 2>/dev/null || (\
+	 echo The splint test requires splint to be installed.; \
+	 exit 1; \
+	)
+	splint -I$(srcdir)/src/include -Isrc/include $(DEFS) +posixlib -checks -exportheader -declundef -unrecog -formatconst -mustfreefresh $(patsubst %, $(srcdir)/%, $(allsrc))
 
 rats:
 	@which rats >/dev/null 2>/dev/null || (\

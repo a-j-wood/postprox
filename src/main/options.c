@@ -32,10 +32,10 @@ extern int minioptind, miniopterr, minioptopt;
 
 #endif				/* !HAVE_GETOPT */
 
-
-void display_help(void);
-void display_license(void);
-void display_version(void);
+/*@ -redecl @*/
+extern void display_help(void);
+extern void display_license(void);
+extern void display_version(void);
 
 
 /*
@@ -43,9 +43,10 @@ void display_version(void);
  */
 void opts_free(opts_t opts)
 {
-	if (!opts)
+	/*@ -usedef @ */
+	if (opts == NULL)
 		return;
-	if (opts->argv)
+	if (opts->argv != NULL)
 		free(opts->argv);
 	free(opts);
 }
@@ -63,21 +64,24 @@ void opts_free(opts_t opts)
  */
 opts_t opts_parse(int argc, char **argv)
 {
+	/*@ -readonlytrans -nullassign @ */
+	/*@ -unqualifiedtrans -observertrans -statictrans @ */
+	/*@ -mustfreeonly -globstate -branchstate @ */
 #ifdef HAVE_GETOPT_LONG
 	struct option long_options[] = {
-		{"help", 0, 0, 'h'},
-		{"license", 0, 0, 'L'},
-		{"version", 0, 0, 'V'},
-		{"listen", 1, 0, 'l'},
-		{"command", 1, 0, 'c'},
-		{"tempdir", 1, 0, 'd'},
-		{"timeout", 1, 0, 't'},
-		{"reject", 0, 0, 'r'},
-		{"verbose", 0, 0, 'v'},
+		{"help", 0, NULL, (int) 'h'},
+		{"license", 0, NULL, (int) 'L'},
+		{"version", 0, NULL, (int) 'V'},
+		{"listen", 1, NULL, (int) 'l'},
+		{"command", 1, NULL, (int) 'c'},
+		{"tempdir", 1, NULL, (int) 'd'},
+		{"timeout", 1, NULL, (int) 't'},
+		{"reject", 0, NULL, (int) 'r'},
+		{"verbose", 0, NULL, (int) 'v'},
 # ifdef DEBUG
-		{"debug", 0, 0, 'D'},
+		{"debug", 0, NULL, (int) 'D'},
 # endif				/* DEBUG */
-		{0, 0, 0, 0}
+		{NULL, 0, NULL, 0}
 	};
 	int option_index = 0;
 #endif				/* HAVE_GETOPT_LONG */
@@ -90,20 +94,20 @@ opts_t opts_parse(int argc, char **argv)
 	int c;
 	opts_t opts;
 
-	opts = calloc(1, sizeof(*opts));
-	if (!opts) {
+	opts = calloc((size_t) 1, sizeof(*opts));
+	if (opts == NULL) {
 		fprintf(stderr,		    /* RATS: ignore (OK) */
 			_("%s: option structure allocation failed (%s)"),
 			argv[0], strerror(errno));
 		fprintf(stderr, "\n");
-		return 0;
+		return NULL;
 	}
 
 	opts->program_name = argv[0];
 
 	opts->argc = 0;
-	opts->argv = calloc(argc + 1, sizeof(char *));
-	if (!opts->argv) {
+	opts->argv = calloc((size_t) (argc + 1), sizeof(char *));
+	if (opts->argv == NULL) {
 		fprintf(stderr,		    /* RATS: ignore (OK) */
 			_
 			("%s: option structure argv allocation failed (%s)"),
@@ -115,7 +119,7 @@ opts_t opts_parse(int argc, char **argv)
 
 	opts->action = ACTION_PROXY;
 	opts->serverhost = NULL;
-	opts->serverport = 25;
+	opts->serverport = (unsigned short) 25;
 	opts->listenhost = "127.0.0.1";
 	opts->listenport = 0;
 	opts->filtercommand = "true";
@@ -144,36 +148,37 @@ opts_t opts_parse(int argc, char **argv)
 			display_help();
 			opts->action = ACTION_NONE;
 			return opts;
-			break;
 		case 'L':
 			display_license();
 			opts->action = ACTION_NONE;
 			return opts;
-			break;
 		case 'V':
 			display_version();
 			opts->action = ACTION_NONE;
 			return opts;
-			break;
 		case 'l':
 			ptr = strchr(optarg, ':');
-			if (ptr) {
+			if (ptr != NULL) {
 				opts->listenhost = optarg;
-				opts->listenport = atoi(ptr + 1);
+				opts->listenport =
+				    (unsigned short) atoi(ptr + 1);
 			} else {
-				opts->listenport = atoi(optarg);
+				opts->listenport =
+				    (unsigned short) atoi(optarg);
 				/*
 				 * Catch IPs with no port, eg "127.0.0.1".
 				 */
-				if (strchr(optarg, '.'))
+				if (strchr(optarg, '.') != NULL)
 					opts->listenport = 0;
 			}
 			if (opts->listenport == 0) {
 				fprintf(stderr, "%s: %s: %s", argv[0],
-					_("invalid listen port"), optarg);
+					_("invalid listen port"),
+					optarg ==
+					NULL ? "(null)" : optarg);
 				fprintf(stderr, "\n");
 				opts_free(opts);
-				return 0;
+				return NULL;
 			}
 			break;
 		case 'c':
@@ -208,8 +213,7 @@ opts_t opts_parse(int argc, char **argv)
 #endif
 			fprintf(stderr, "\n");
 			opts_free(opts);
-			return 0;
-			break;
+			return NULL;
 		}
 
 	} while (c != -1);
@@ -217,9 +221,9 @@ opts_t opts_parse(int argc, char **argv)
 	if ((opts->action == ACTION_PROXY) && (optind < argc)) {
 		optarg = argv[optind];
 		ptr = strchr(optarg, ':');
-		if (ptr) {
+		if (ptr != NULL) {
 			opts->serverhost = optarg;
-			opts->serverport = atoi(ptr + 1);
+			opts->serverport = (unsigned short) atoi(ptr + 1);
 		} else {
 			opts->serverhost = optarg;
 		}
@@ -229,7 +233,7 @@ opts_t opts_parse(int argc, char **argv)
 		fprintf(stderr, "%s: %s\n", argv[0],
 			_("no output server specified"));
 		opts_free(opts);
-		return 0;
+		return NULL;
 	}
 
 	return opts;

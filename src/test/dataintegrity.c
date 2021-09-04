@@ -19,7 +19,8 @@
 #include <unistd.h>
 
 
-int smtp_main(opts_t, int, int, int, int);
+/*@ -redecl @*/
+extern int smtp_main(opts_t, int, int, int, int);
 
 
 /*
@@ -27,7 +28,7 @@ int smtp_main(opts_t, int, int, int, int);
  * data as a fake email and making sure the SMTP conversation ends up the
  * same at the output as it did on the input. Returns nonzero on failure.
  */
-int test_proxydata(opts_t opts, char *data, int datasize)
+static int test_proxydata(opts_t opts, char *data, int datasize)
 {
 	char insrv_rcfile[256];		 /* RATS: ignore */
 	char outsrv_wfile[256];		 /* RATS: ignore */
@@ -36,108 +37,96 @@ int test_proxydata(opts_t opts, char *data, int datasize)
 	int outsrv_wfd;
 	int insrv_rfd[2];
 	int outsrv_rfd[2];
-	pid_t child;
+	pid_t child, wret;
+	FILE *fcmp_a;
+	FILE *fcmp_b;
 	int status;
 	int ret;
 
-	if (pipe(insrv_rfd)) {
-		return 1;
-	}
+	memset(insrv_rcfile, 0, sizeof(insrv_rcfile));
+	memset(outsrv_wfile, 0, sizeof(outsrv_wfile));
+	insrv_rcfd = -1;
+	insrv_wfd = -1;
+	outsrv_wfd = -1;
+	insrv_rfd[0] = -1;
+	insrv_rfd[1] = -1;
+	outsrv_rfd[0] = -1;
+	outsrv_rfd[1] = -1;
+	fcmp_a = NULL;
+	fcmp_b = NULL;
+	child = 0;
 
-	if (pipe(outsrv_rfd)) {
-		close(insrv_rfd[0]);
-		close(insrv_rfd[1]);
-		return 1;
-	}
+	ret = 0;
+
+	FAIL_IF(pipe(insrv_rfd) != 0);
+	FAIL_IF(pipe(outsrv_rfd) != 0);
 
 	insrv_wfd = open("/dev/null", O_WRONLY);
-	if (insrv_wfd < 0) {
-		close(insrv_rfd[0]);
-		close(insrv_rfd[1]);
-		close(outsrv_rfd[0]);
-		close(outsrv_rfd[1]);
-		return 1;
-	}
+	FAIL_IF(insrv_wfd < 0);
 
-	if (test_tmpfd(insrv_rcfile, sizeof(insrv_rcfile), &insrv_rcfd)) {
-		close(insrv_rfd[0]);
-		close(insrv_rfd[1]);
-		close(outsrv_rfd[0]);
-		close(outsrv_rfd[1]);
-		close(insrv_wfd);
-		return 1;
-	}
-
-	if (test_tmpfd(outsrv_wfile, sizeof(outsrv_wfile), &outsrv_wfd)) {
-		close(insrv_rfd[0]);
-		close(insrv_rfd[1]);
-		close(outsrv_rfd[0]);
-		close(outsrv_rfd[1]);
-		close(insrv_wfd);
-		close(insrv_rcfd);
-		remove(insrv_rcfile);
-		return 1;
-	}
+	FAIL_IF(test_tmpfd
+		(insrv_rcfile, (int) sizeof(insrv_rcfile),
+		 &insrv_rcfd) != 0);
+	FAIL_IF(test_tmpfd
+		(outsrv_wfile, (int) sizeof(outsrv_wfile),
+		 &outsrv_wfd) != 0);
 
 	child = fork();
 
-	if (child < 0) {
-		close(insrv_rfd[0]);
-		close(insrv_rfd[1]);
-		close(outsrv_rfd[0]);
-		close(outsrv_rfd[1]);
-		close(insrv_wfd);
-		close(insrv_rcfd);
-		remove(insrv_rcfile);
-		close(outsrv_wfd);
-		remove(outsrv_wfile);
-		return 1;
-	}
+	FAIL_IF(child < 0);
 
 	if (child == 0) {
 		int childret;
 
-		close(insrv_rfd[1]);
-		close(outsrv_rfd[1]);
-		close(insrv_rcfd);
+		(void) close(insrv_rfd[1]);
+		(void) close(outsrv_rfd[1]);
+		(void) close(insrv_rcfd);
 
 		childret =
 		    smtp_main(opts, insrv_rfd[0], insrv_wfd, outsrv_rfd[0],
 			      outsrv_wfd);
 
-		close(insrv_rfd[0]);
-		close(outsrv_rfd[0]);
-		close(insrv_wfd);
-		close(outsrv_wfd);
+		(void) close(insrv_rfd[0]);
+		(void) close(outsrv_rfd[0]);
+		(void) close(insrv_wfd);
+		(void) close(outsrv_wfd);
 
 		exit(childret);
 	}
 
-	close(insrv_rfd[0]);
-	close(outsrv_rfd[0]);
+	FAIL_IF(close(insrv_rfd[0]) != 0);
+	insrv_rfd[0] = -1;
+	FAIL_IF(close(outsrv_rfd[0]) != 0);
+	outsrv_rfd[0] = -1;
 
-	test_fdprintf(outsrv_rfd[1], "%s\r\n", "220 test ESMTP");
+	FAIL_IF(test_fdprintf(outsrv_rfd[1], "%s\r\n", "220 test ESMTP") !=
+		0);
 	test_usleep(100);
-	test_fdprintf(insrv_rfd[1], "%s\r\n", "HELO me");
-	test_fdprintf(insrv_rcfd, "%s\r\n", "HELO me");
+	FAIL_IF(test_fdprintf(insrv_rfd[1], "%s\r\n", "HELO me") != 0);
+	FAIL_IF(test_fdprintf(insrv_rcfd, "%s\r\n", "HELO me") != 0);
 	test_usleep(100);
-	test_fdprintf(outsrv_rfd[1], "%s\r\n", "250 test");
-	test_usleep(100);
-
-	test_fdprintf(insrv_rfd[1], "%s\r\n", "MAIL FROM:<test@test.com>");
-	test_fdprintf(insrv_rcfd, "%s\r\n", "MAIL FROM:<test@test.com>");
-	test_usleep(100);
-	test_fdprintf(outsrv_rfd[1], "%s\r\n", "250 OK");
+	FAIL_IF(test_fdprintf(outsrv_rfd[1], "%s\r\n", "250 test") != 0);
 	test_usleep(100);
 
-	test_fdprintf(insrv_rfd[1], "%s\r\n", "RCPT TO:<test@test.com>");
-	test_fdprintf(insrv_rcfd, "%s\r\n", "RCPT TO:<test@test.com>");
+	FAIL_IF(test_fdprintf
+		(insrv_rfd[1], "%s\r\n",
+		 "MAIL FROM:<test@test.com>") != 0);
+	FAIL_IF(test_fdprintf
+		(insrv_rcfd, "%s\r\n", "MAIL FROM:<test@test.com>") != 0);
 	test_usleep(100);
-	test_fdprintf(outsrv_rfd[1], "%s\r\n", "250 OK");
+	FAIL_IF(test_fdprintf(outsrv_rfd[1], "%s\r\n", "250 OK") != 0);
 	test_usleep(100);
 
-	test_fdprintf(insrv_rfd[1], "%s\r\n", "DATA");
-	test_fdprintf(insrv_rcfd, "%s\r\n", "DATA");
+	FAIL_IF(test_fdprintf
+		(insrv_rfd[1], "%s\r\n", "RCPT TO:<test@test.com>") != 0);
+	FAIL_IF(test_fdprintf
+		(insrv_rcfd, "%s\r\n", "RCPT TO:<test@test.com>") != 0);
+	test_usleep(100);
+	FAIL_IF(test_fdprintf(outsrv_rfd[1], "%s\r\n", "250 OK") != 0);
+	test_usleep(100);
+
+	FAIL_IF(test_fdprintf(insrv_rfd[1], "%s\r\n", "DATA") != 0);
+	FAIL_IF(test_fdprintf(insrv_rcfd, "%s\r\n", "DATA") != 0);
 	test_usleep(100);
 
 	/*
@@ -158,123 +147,144 @@ int test_proxydata(opts_t opts, char *data, int datasize)
 			 * Escape leading dots.
 			 */
 			if (ptr[0] == '.') {
-				write_retry(insrv_rfd[1], ".", 1);
-				write_retry(insrv_rcfd, ".", 1);
+				FAIL_IF(write_retry(insrv_rfd[1], ".", 1)
+					!= 0);
+				FAIL_IF(write_retry(insrv_rcfd, ".", 1) !=
+					0);
 			}
 
 			/*
 			 * Network newlines, i.e. convert \n to \r\n.
 			 */
-			nextptr = memchr(ptr, '\n', bytesleft);
-			if (nextptr) {
+			nextptr =
+			    memchr(ptr, (int) '\n', (size_t) bytesleft);
+			if (nextptr != NULL) {
 				int offset;
 				offset = nextptr - ptr;
 				if (offset > 0) {
-					write_retry(insrv_rfd[1], ptr,
-						    offset);
-					write_retry(insrv_rcfd, ptr,
-						    offset);
+					FAIL_IF(write_retry
+						(insrv_rfd[1], ptr,
+						 offset) != 0);
+					FAIL_IF(write_retry
+						(insrv_rcfd, ptr,
+						 offset) != 0);
 				}
-				write_retry(insrv_rfd[1], "\r\n", 2);
-				write_retry(insrv_rcfd, "\r\n", 2);
+				FAIL_IF(write_retry
+					(insrv_rfd[1], "\r\n", 2) != 0);
+				FAIL_IF(write_retry(insrv_rcfd, "\r\n", 2)
+					!= 0);
 				ptr = nextptr;
 				ptr++;
 				bytesleft -= offset;
 				bytesleft--;
 			} else {
-				write_retry(insrv_rfd[1], ptr, bytesleft);
-				write_retry(insrv_rcfd, ptr, bytesleft);
+				FAIL_IF(write_retry
+					(insrv_rfd[1], ptr,
+					 bytesleft) != 0);
+				FAIL_IF(write_retry
+					(insrv_rcfd, ptr, bytesleft) != 0);
 				bytesleft = 0;
 			}
 		}
 	}
 
 	if (data[datasize - 1] != '\n') {
-		test_fdprintf(insrv_rfd[1], "\r\n");
-		test_fdprintf(insrv_rcfd, "\r\n");
+		FAIL_IF(test_fdprintf(insrv_rfd[1], "\r\n") != 0);
+		FAIL_IF(test_fdprintf(insrv_rcfd, "\r\n") != 0);
 	}
 
-	test_fdprintf(insrv_rfd[1], "%s\r\n", ".");
-	test_fdprintf(insrv_rcfd, "%s\r\n", ".");
+	FAIL_IF(test_fdprintf(insrv_rfd[1], "%s\r\n", ".") != 0);
+	FAIL_IF(test_fdprintf(insrv_rcfd, "%s\r\n", ".") != 0);
 	test_usleep(2000);
-	test_fdprintf(outsrv_rfd[1], "%s\r\n",
-		      "354 End data with <CR><LF>.<CR><LF>");
+	FAIL_IF(test_fdprintf
+		(outsrv_rfd[1], "%s\r\n",
+		 "354 End data with <CR><LF>.<CR><LF>") != 0);
 	test_usleep(1000);
-	test_fdprintf(outsrv_rfd[1], "%s\r\n", "250 OK sent");
+	FAIL_IF(test_fdprintf(outsrv_rfd[1], "%s\r\n", "250 OK sent") !=
+		0);
 	test_usleep(100);
 
 	/*
-	 * Here we just disconnect instead of sending the QUIT, but we store
-	 * QUIT in the read-compare-file, because the proxy will send one
-	 * back anyway due to the closing of the connection. Because of
-	 * timing issues if we send the QUIT explicitly, then sometimes we
-	 * see two coming back, throwing off the test.
-	 *
-	 * So we DON'T do: test_fdprintf(insrv_rfd[1], "%s\r\n", "QUIT");
+	 * Here we have to wait before disconnecting after the QUIT, because
+	 * if we disconnect before the proxy processes the QUIT, it will
+	 * also issue one itself, so QUIT will appear twice in the output
+	 * file but only once in the read-compare file.
 	 */
-	test_fdprintf(insrv_rcfd, "%s\r\n", "QUIT");
-	test_fdprintf(outsrv_rfd[1], "%s\r\n", "221 Bye");
+	FAIL_IF(test_fdprintf(insrv_rfd[1], "%s\r\n", "QUIT") != 0);
+	FAIL_IF(test_fdprintf(insrv_rcfd, "%s\r\n", "QUIT") != 0);
+	test_usleep(100000);
+	FAIL_IF(test_fdprintf(outsrv_rfd[1], "%s\r\n", "221 Bye") != 0);
 
-	close(insrv_rfd[1]);
-	close(outsrv_rfd[1]);
+	FAIL_IF(close(insrv_rfd[1]) != 0);
+	insrv_rfd[1] = -1;
+	FAIL_IF(close(outsrv_rfd[1]) != 0);
+	outsrv_rfd[1] = -1;
 
-	waitpid(child, &status, 0);
+	wret = waitpid(child, &status, 0);
+	FAIL_IF(wret != child);
 
 	/*
 	 * Poor-man's cmp(1).
 	 */
-	ret = 0;
 	{
-		FILE *fptr1;
-		FILE *fptr2;
 		char buf1[1024];	 /* RATS: ignore */
 		char buf2[1024];	 /* RATS: ignore */
-		int got1, got2;
+		size_t got1, got2;
 
-		fptr1 = fopen(insrv_rcfile, "rb");
-		fptr2 = fopen(outsrv_wfile, "rb");
+		fcmp_a = fopen(insrv_rcfile, "rb");
+		FAIL_IF(fcmp_a == NULL);
+		fcmp_b = fopen(outsrv_wfile, "rb");
+		FAIL_IF(fcmp_b == NULL);
 
-		while ((fptr1 != NULL)
-		       && (fptr2 != NULL)
-		       && (!feof(fptr1))
-		       && (!feof(fptr2))
+		while ((fcmp_a != NULL)
+		       && (fcmp_b != NULL)
+		       && (feof(fcmp_a) == 0)
+		       && (feof(fcmp_b) == 0)
 		    ) {
-			got1 = fread(buf1, 1, sizeof(buf1), fptr1);
-			if (got1 < 0) {
-				ret = 1;
-				break;
-			}
-			got2 = fread(buf2, got1, 1, fptr2);
-			if (got2 < 1) {
-				ret = 1;
-				break;
-			}
-			if (memcmp(buf1, buf2, got1) != 0) {
-				ret = 1;
-				break;
-			}
+			got1 =
+			    fread(buf1, (size_t) 1, sizeof(buf1), fcmp_a);
+			FAIL_IF(got1 < (size_t) 1);
+			got2 =
+			    fread(buf2, (size_t) got1, (size_t) 1, fcmp_b);
+			FAIL_IF(got2 < (size_t) 1);
+			FAIL_IF(memcmp(buf1, buf2, (size_t) got1) != 0);
 		}
-		fclose(fptr1);
-		fclose(fptr2);
+
+		FAIL_IF(fcmp_a == NULL || fclose(fcmp_a) != 0);
+		fcmp_a = NULL;
+		FAIL_IF(fcmp_b == NULL || fclose(fcmp_b) != 0);
+		fcmp_b = NULL;
 	}
 
+      end:
+	CLOSE_IF_VALID(insrv_rfd[0]);
+	CLOSE_IF_VALID(insrv_rfd[1]);
+	CLOSE_IF_VALID(outsrv_rfd[0]);
+	CLOSE_IF_VALID(outsrv_rfd[1]);
+	FCLOSE_IF_VALID(fcmp_a);
+	FCLOSE_IF_VALID(fcmp_b);
 	/*
 	 * On failure, we leave the SMTP input and output files, and mark
 	 * them as such by appending INPUT and OUTPUT to them.
 	 */
+	if (ret != 0) {
+		if (insrv_rcfd >= 0)
+			(void) test_fdprintf(insrv_rcfd, "\n%s\n",
+					     _("--INPUT--"));
+		if (outsrv_wfd >= 0)
+			(void) test_fdprintf(outsrv_wfd, "\n%s\n",
+					     _("--OUTPUT--"));
+	}
+	CLOSE_IF_VALID(insrv_rcfd);
+	CLOSE_IF_VALID(insrv_wfd);
+	CLOSE_IF_VALID(outsrv_wfd);
 	if (ret == 0) {
-		remove(insrv_rcfile);
-		remove(outsrv_wfile);
-	} else {
-		test_fdprintf(insrv_rcfd, "\n%s\n", _("--INPUT--"));
-		test_fdprintf(outsrv_wfd, "\n%s\n", _("--OUTPUT--"));
+		REMOVE_IF_VALID(insrv_rcfile);
+		REMOVE_IF_VALID(outsrv_wfile);
 	}
 
-	close(insrv_rcfd);
-	close(insrv_wfd);
-	close(outsrv_wfd);
-
 	return ret;
+
 }
 
 
@@ -287,7 +297,7 @@ int test_data_integrity_simple(opts_t opts)
 
 	str = "From: test\nTo: test\nSubject: test\n\nTest!\n";
 
-	return test_proxydata(opts, str, strlen(str));
+	return test_proxydata(opts, str, (int) strlen(str));
 }
 
 /*
@@ -302,13 +312,13 @@ int test_data_integrity_dots(opts_t opts)
 	strcpy(str, ".\n..\n...\n....\n.....\n");
 
 	for (i = 800; i < 1100; i++) {
-		memset(buf, '.', i);
+		memset(buf, (int) '.', (size_t) i);
 		buf[i] = '\n';
-		buf[i + 1] = 0;
+		buf[i + 1] = '\0';
 		strcat(str, buf);	    /* RATS: ignore */
 	}
 
-	return test_proxydata(opts, str, strlen(str));
+	return test_proxydata(opts, str, (int) strlen(str));
 }
 
 
@@ -321,14 +331,18 @@ int test_data_integrity_longlines(opts_t opts)
 	char buf[4096];			 /* RATS: ignore */
 	int i;
 
-	str[0] = 0;
+	str[0] = '\0';
 
 	for (i = 900; i < 1100; i++) {
-		sprintf(buf, "%*s\n", i, " ");
+#ifdef HAVE_SNPRINTF
+		(void) snprintf(buf, sizeof(buf), "%*s\n", i, " ");
+#else
+		(void) sprintf(buf, "%*s\n", i, " ");
+#endif
 		strcat(str, buf);	    /* RATS: ignore */
 	}
 
-	return test_proxydata(opts, str, strlen(str));
+	return test_proxydata(opts, str, (int) strlen(str));
 }
 
 
@@ -341,12 +355,14 @@ int test_data_integrity_randomdata(opts_t opts)
 	char buf[163840];		 /* RATS: ignore */
 	int i;
 
-	srand(1234);			    /* RATS: ignore (predictable) */
-	for (i = 0; i < sizeof(buf); i++) {
-		buf[i] = rand();
+	memset(buf, 0, sizeof(buf));
+
+	srand((unsigned int) 1234);	    /* RATS: ignore (predictable) */
+	for (i = 0; i < (int) sizeof(buf); i++) {
+		buf[i] = (char) rand();
 	}
 
-	return test_proxydata(opts, buf, sizeof(buf));
+	return test_proxydata(opts, buf, (int) sizeof(buf));
 }
 
 /* EOF */

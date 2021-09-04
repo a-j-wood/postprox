@@ -35,7 +35,7 @@ int write_retry(int fd, char *buf, int bufsize)
 		return -1;
 	}
 
-	count = bufsize;
+	count = (size_t) bufsize;
 	while (count > 0) {
 		written = write(fd, buf, count);
 		if (written < 0) {

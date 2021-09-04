@@ -29,24 +29,27 @@
  * allocated).
  */
 typedef int (*testfunc_t) (opts_t);
-int test_write_retry(opts_t);
-int test_data_integrity_simple(opts_t);
-int test_data_integrity_dots(opts_t);
-int test_data_integrity_longlines(opts_t);
-int test_data_integrity_randomdata(opts_t);
-int test_email_info_simple(opts_t);
-int test_email_info_oversized(opts_t);
+/*@ -redecl @*/
+extern int test_write_retry(opts_t);
+extern int test_data_integrity_simple(opts_t);
+extern int test_data_integrity_dots(opts_t);
+extern int test_data_integrity_longlines(opts_t);
+extern int test_data_integrity_randomdata(opts_t);
+extern int test_email_info_simple(opts_t);
+extern int test_email_info_oversized(opts_t);
 
 
+/*@ -redef -observertrans -staticinittrans -readonlytrans -mustfreeonly @*/
+/*@ -statictrans -compdestroy @*/
 /*
  * Run all of the tests.
  */
-int main(int argc, char **argv)
+int main( /*@unused@ */ int argc, /*@unused@ */ char **argv)
 {
 	struct opts_s opts;
 	struct {
-		char *name;
-		testfunc_t func;
+		char /*@null@ */ *name;
+		 testfunc_t /*@null@ */ func;
 	} test[] = {
 		{
 		_("retrying write() function"), test_write_retry}, {
@@ -64,10 +67,10 @@ int main(int argc, char **argv)
 			    test_email_info_oversized}, {
 		NULL, NULL}
 	};
-	int testnum, numtests, fail;
+	int testnum, numtests, fail, ret;
 
 #ifdef HAVE_MCHECK_H
-	if (getenv("MALLOC_TRACE"))	    /* RATS: ignore (value unused) */
+	if (getenv("MALLOC_TRACE") != NULL) /* RATS: ignore (value unused) */
 		mtrace();
 #endif
 
@@ -80,7 +83,7 @@ int main(int argc, char **argv)
 	for (testnum = 0; test[testnum].name != NULL; testnum++);
 	numtests = testnum;
 
-	setvbuf(stdout, NULL, _IONBF, 0);
+	(void) setvbuf(stdout, NULL, (int) _IONBF, 0);
 
 	fail = 0;
 
@@ -91,9 +94,9 @@ int main(int argc, char **argv)
 		opts.program_name = PACKAGE;
 		opts.action = ACTION_PROXY;
 		opts.serverhost = "127.0.0.1";
-		opts.serverport = 30000;
+		opts.serverport = (unsigned short) 30000;
 		opts.listenhost = "127.0.0.1";
-		opts.listenport = 30001;
+		opts.listenport = (unsigned short) 30001;
 		opts.filtercommand = "true";
 		opts.tempdirectory = "/tmp";
 		opts.timeout = 30;
@@ -111,8 +114,10 @@ int main(int argc, char **argv)
 
 		printf("%3d/%d: %-50s", testnum + 1, numtests,
 		       test[testnum].name);
-		if (test[testnum].func(&opts)) {
-			printf(" %s\n", _("FAILED"));
+
+		ret = test[testnum].func(&opts);
+		if (ret != 0) {
+			printf(" %s [%d]\n", _("FAILED"), ret);
 			fail++;
 		} else {
 			printf(" %s\n", _("OK"));
@@ -133,7 +138,7 @@ int main(int argc, char **argv)
 /*
  * Dummy log function.
  */
-void log_line(logpri_t priority, char *format, ...)
+void log_line( /*@unused@ */ logpri_t priority, char *format, ...)
 {
 	char buf[1024];			 /* RATS: ignore (checked OK - ish) */
 	char *ptr;
@@ -141,27 +146,27 @@ void log_line(logpri_t priority, char *format, ...)
 
 	va_start(ap, format);
 
-	buf[0] = 0;
+	buf[0] = '\0';
 
 #if HAVE_VSNPRINTF
-	vsnprintf(buf, sizeof(buf), format, ap);
+	(void) vsnprintf(buf, sizeof(buf), format, ap);
 #else
-	vsprintf(buf, format, ap);	    /* RATS: ignore (unavoidable) */
+	(void) vsprintf(buf, format, ap);   /* RATS: ignore (unavoidable) */
 #endif
 
 	va_end(ap);
 
-	buf[sizeof(buf) - 1] = 0;
+	buf[sizeof(buf) - 1] = '\0';
 
 	/*
 	 * Strip \r and/or \n from the string.
 	 */
 	ptr = strchr(buf, '\r');
-	if (ptr)
-		ptr[0] = 0;
+	if (ptr != NULL)
+		ptr[0] = '\0';
 	ptr = strchr(buf, '\n');
-	if (ptr)
-		ptr[0] = 0;
+	if (ptr != NULL)
+		ptr[0] = '\0';
 
 	/*
 	 * We could now do something with the line to be logged, if we
@@ -177,7 +182,12 @@ void log_line(logpri_t priority, char *format, ...)
  */
 int test_tmpfd(char *buf, int bufsz, int *fdptr)
 {
-	sprintf(buf, "%.*s/tXXXXXX", bufsz - 10, "/tmp");
+#ifdef HAVE_SNPRINTF
+	(void) snprintf(buf, (size_t) bufsz, "%.*s/tXXXXXX", bufsz - 10,
+			"/tmp");
+#else
+	(void) sprintf(buf, "%.*s/tXXXXXX", bufsz - 10, "/tmp");
+#endif
 
 #ifdef HAVE_MKSTEMP
 	*fdptr = mkstemp(buf);
@@ -199,7 +209,7 @@ int test_tmpfd(char *buf, int bufsz, int *fdptr)
 int test_fdprintf(int fd, char *format, ...)
 {
 	int n;
-	int sz;
+	size_t sz;
 	char *p;
 	char *newp;
 	va_list ap;
@@ -210,7 +220,7 @@ int test_fdprintf(int fd, char *format, ...)
 	 * below doesn't seem to work too well, so we start out with a big
 	 * buffer.
 	 */
-	sz = 16384;
+	sz = (size_t) 16384;
 
 	p = malloc(sz);
 	if (p == NULL)
@@ -220,16 +230,17 @@ int test_fdprintf(int fd, char *format, ...)
 	 * Try to allocate enough memory to print the string into. This is
 	 * derived from the example in "man printf".
 	 */
-	while (1) {
+	/*@ -usereleased -branchstate -usedef @ */
+	while (1 == 1) {
 		va_start(ap, format);
 		n = vsnprintf(p, sz, format, ap);
 		va_end(ap);
 
-		if (n > -1 && n < sz)
+		if (n > -1 && n < (int) sz)
 			break;
 
 		if (n > -1) {
-			sz = n + 1;
+			sz = (size_t) n + 1;
 		} else {
 			sz = sz * 2;
 		}
@@ -241,7 +252,7 @@ int test_fdprintf(int fd, char *format, ...)
 		}
 	}
 
-	ret = write_retry(fd, p, strlen(p));
+	ret = write_retry(fd, p, (int) strlen(p));
 	free(p);
 	return ret;
 }

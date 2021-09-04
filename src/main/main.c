@@ -11,18 +11,21 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <errno.h>
 #ifdef HAVE_MCHECK_H
 #include <mcheck.h>
 #endif
 
 
+/*@ -redecl @*/
 #ifdef DEBUG
-void log_open(char *, unsigned char);
+extern void log_open(char *, int);
 #else
-void log_open(char *);
+extern void log_open(char *);
 #endif
-void log_close(void);
-int smtp_main(opts_t, int, int, int, int);
+extern void log_close(void);
+extern int smtp_main(opts_t, int, int, int, int);
 
 
 /*
@@ -35,7 +38,7 @@ int main(int argc, char **argv)
 	int retcode;
 
 #ifdef HAVE_MCHECK_H
-	if (getenv("MALLOC_TRACE"))	    /* RATS: ignore (value unused) */
+	if (getenv("MALLOC_TRACE") != NULL) /* RATS: ignore (value unused) */
 		mtrace();
 #endif
 
@@ -46,7 +49,7 @@ int main(int argc, char **argv)
 #endif
 
 	opts = opts_parse(argc, argv);
-	if (!opts)
+	if (opts == NULL)
 		return 1;
 
 	if (opts->action == ACTION_NONE) {
@@ -67,8 +70,25 @@ int main(int argc, char **argv)
 			_("Listen mode is not yet implemented."));
 		retcode = 1;
 	} else {
-		retcode =
-		    smtp_main(opts, fileno(stdin), fileno(stdout), -1, -1);
+		int fd_in;
+		int fd_out;
+
+		fd_in = fileno(stdin);
+		fd_out = fileno(stdout);
+
+		if (fd_in < 0) {
+			fprintf(stderr, "%s: %s\n",
+				_("Standard input is unreadable"),
+				strerror(errno));
+			retcode = 1;
+		} else if (fd_out < 0) {
+			fprintf(stderr, "%s: %s\n",
+				_("Standard output is unreadable"),
+				strerror(errno));
+			retcode = 1;
+		} else {
+			retcode = smtp_main(opts, fd_in, fd_out, -1, -1);
+		}
 	}
 
 #ifdef DEBUG

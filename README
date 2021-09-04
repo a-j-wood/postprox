@@ -58,4 +58,12 @@ The `postprox' home page is at:
 
 The latest version can always be found here.
 
+Credit is also due to:
+
+  Graham Maltby
+    - Patch for extended recipients logging, longer filter messages
+
+  Jeremy Fitzhardinge <http://www.goop.org/~jeremy/>
+    - Detailed report and analysis of input/output sync problem
+
 -----------------------------------------------------------------------------

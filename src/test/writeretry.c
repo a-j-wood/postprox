@@ -18,7 +18,7 @@
  * This test function is not much more than a stub; it checks write_retry()
  * does basic sanity checks and can write to /dev/null, and that's about it.
  */
-int test_write_retry(opts_t opts)
+int test_write_retry( /*@unused@ */ opts_t opts)
 {
 	int fd;
 	/*
@@ -26,16 +26,16 @@ int test_write_retry(opts_t opts)
 	 */
 	if (write_retry(-1, "", 0) == 0)
 		return 1;
-	if (write_retry(1, 0, 0) == 0)
+	if (write_retry(1, NULL, 0) == 0)
 		return 1;
 
 	fd = open("/dev/null", O_WRONLY);
-	if (write_retry(fd, "----------", 10)) {
-		close(fd);
+	if (write_retry(fd, "----------", 10) != 0) {
+		(void) close(fd);
 		return 1;
 	}
 
-	close(fd);
+	(void) close(fd);
 
 	return 0;
 }
