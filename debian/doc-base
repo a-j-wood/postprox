@@ -1,0 +1,8 @@
+Document: postprox
+Title: Minimal Postfix SMTP Proxy Documentation Index
+Author: Andrew Wood
+Abstract: The minimal Postfix SMTP proxy copies an SMTP conversation between its input and another SMTP server, but spools the DATA portion to a temporary file and runs a specified program on it before passing it on to the output server - or outputting an SMTP error code instead if the content filter says so.
+Section: Apps/Mail
+
+Format: text
+Files: /usr/share/doc/postprox/quickref.txt.gz

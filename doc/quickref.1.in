@@ -1,0 +1,304 @@
+.TH @UCPACKAGE@ 1 "January 2006" Linux "User Manuals"
+.SH NAME
+@PACKAGE@ \- minimal Postfix SMTP proxy
+.SH SYNOPSIS 
+\fB@PACKAGE@\fR \fIHOST:PORT\fR
+[\fI\-c CMD\fR] [\fI-d DIR\fR] [\fI-t SEC\fR]
+[\fI-rv\fR]
+[\fI\-l [IP:]PORT]
+.br
+\fB@PACKAGE@\fR \fI-\fIhLV\fR
+
+.SH DESCRIPTION
+.B @PACKAGE@
+reads SMTP commands on standard input and passes them on to the specified
+mail server unchanged, except for the DATA portion.  Output from the
+specified mail server is passed back to standard output.  The DATA portion
+from the input mail server (stdin) is spooled to a temporary file so that
+.B COMMAND
+can be run on it; if
+.B COMMAND
+exits with a non-zero exit status, its standard error is passed as an SMTP
+error to the input SMTP server (on stdout) and the connection to the output
+SMTP server is aborted with a QUIT.
+
+.B @PACKAGE@
+is intended to be used in a
+.BR postfix (1)
+configuration as a before-queue or after-queue content filter.
+
+See the
+.B EXAMPLE CONFIGURATION
+section for an example of how to use
+.B @PACKAGE@
+as a before-queue content filter.
+
+.SH OPTIONS
+The
+.B @PACKAGE@
+options are listed below.
+.TP
+.BI "\-c, \-\-command " COMMAND
+Use
+.I COMMAND
+as the filtering command.  This will be passed to
+.B sh -c
+when executed.
+
+When
+.B COMMAND
+is run, the environment variable
+.B EMAIL
+will be set to the filename of the email to be processed, and the
+environment variable
+.B OUTFILE
+will be set to the filename of an existing empty file which the filter can
+optionally put a modified version of the message into.
+
+See the
+.B ENVIRONMENT VARIABLES
+section below for more details.
+
+The exit status of
+.B COMMAND
+determines whether the email will be passed through or rejected.  An exit
+status of 0 means to pass the email through, 1 means to reject it - the last
+line of
+.BR COMMAND 's
+standard error output will be used as the error text, and unless it starts
+with a 3-digit number and a space, it will be prefixed with 554 (SMTP hard
+error).  An exit code of 2 or more means the filter failed to run correctly.
+
+If the contents of
+.B OUTFILE
+are left alone by
+.B COMMAND
+then an exit status of 0 means to pass the email through as it was received.
+If
+.B OUTFILE
+contains anything at all, then an exit status of 0 will cause the contents of
+.B OUTFILE
+to be passed through instead of the original email.
+
+.TP
+.BI "\-d, \-\-tempdir " "DIR"
+Use
+.B DIR
+to store temporary files in, instead of the default of
+.BR /tmp .
+.TP
+.BI "\-t, \-\-timeout " "TIMEOUT"
+If the filter command takes longer than
+.B TIMEOUT
+seconds to run, it will be killed and the email will be allowed to pass
+through (or will be rejected if
+.B -r
+was specified).  The default timeout is 30 seconds.
+.TP
+.B \-r, \-\-reject
+If the filter command times out or cannot be run, reject the message with a
+451 (temporary failure) error instead of allowing it through.
+.TP
+.B \-v, \-\-verbose
+By default only errors and warnings are logged.  Adding
+.B \-v
+options increases the amount of information logged.
+.TP
+.BI "\-l, \-\-listen " [IP:]PORT
+Instead of reading from the input SMTP server on standard input, go into the
+background and listen on the given
+.B IP:PORT
+combination for connections.  The default IP is 127.0.0.1 if not specified.
+Listen mode is not recommended because then
+.B postfix
+can't restart
+.B @PACKAGE@
+if it is killed for any reason.
+.TP
+.B \-h, \-\-help
+Print a usage message on standard output and exit successfully.
+.TP
+.B \-L, \-\-license
+Print details of the program's license on standard output and exit
+successfully.
+.TP
+.B \-V, \-\-version         
+Print version information, including a list of available database backends,
+on standard output and exit successfully.
+
+.SH EXAMPLE CONFIGURATION
+
+This configuration is based on steps outlined in the file SMTPD_PROXY_README
+included with
+.BR postfix (1).
+It can be read online here:
+
+  http://www.postfix.org/SMTPD_PROXY_README.html
+
+First, set up a user to run the filter as, such as
+.BR filter .
+
+Next, create a script or program which can be run on an email (the filename
+of the email to examine will be in the environment variable
+.BR EMAIL ),
+and which will exit with status 0 if the email is to be accepted, 1 if it is
+to be rejected, or anything else if there was a problem with an aspect of
+the filter itself.  The filter script can also output an SMTP error on
+standard error if you would like customised error responses.
+
+For instance, a script to scan all incoming email with
+.BR clamdscan (1)
+would look like this:
+
+.RS
+ #!/bin/sh
+ /usr/bin/clamdscan --disable-summary --stdout - < "$EMAIL"
+ STATUS=$?
+ [ -z "$STATUS" ] && STATUS=2
+ [ $STATUS -eq 0 ] && exit 0
+ if [ $STATUS -eq 1 ]; then
+         echo 550 Message contains a virus 1>&2
+         exit 1
+ fi
+ exit 2
+.RE
+
+Now you need to reconfigure
+.BR postfix (1).
+Add the following to
+.IR /etc/postfix/main.cf :
+
+.RS
+ smtpd_proxy_filter=127.0.0.1:10025
+.RE
+
+Now add the following to the bottom of
+.IR /etc/postfix/master.cf :
+
+.RS
+ # SMTP proxy.
+ #
+ 127.0.0.1:10025 inet n  n       n       -       20      spawn
+     user=\fBfilter\fR argv=/usr/sbin/@PACKAGE@ -v -c \fBCOMMAND\fR 127.0.0.1:10026
+
+ #
+ # After-filter SMTP server. Receive mail from the content filter
+ # on localhost port 10026.
+ #
+ 127.0.0.1:10026 inet n  -       n       -        -      smtpd
+     -o smtpd_authorized_xforward_hosts=127.0.0.0/8           
+     -o smtpd_client_restrictions=
+     -o smtpd_helo_restrictions=
+     -o smtpd_sender_restrictions=   
+     -o smtpd_recipient_restrictions=permit_mynetworks,reject
+     -o smtpd_data_restrictions=
+     -o smtpd_junk_command_limit=100000
+     -o smtpd_soft_error_limit=10000   
+     -o smtpd_error_sleep_time=0
+     -o smtpd_proxy_filter=
+     -o mynetworks=127.0.0.0/8
+     -o receive_override_options=no_unknown_recipient_checks
+.RE
+
+Finally, do
+.B postfix reload
+and watch the mail logs to ensure that it's working.  Send a few test emails
+to satisfy yourself that the system is still processing mail correctly.
+
+Remember to replace
+.B COMMAND
+in the above example with the full path to your filtering script.  The
+script must be executable by the
+.B filter
+user.
+
+The number just before
+.B spawn
+in the first line of the addition to master.cf is the maximum number of
+proxy processes to spawn.  Adjust this according to the needs of your
+system.
+
+See the documentation for
+.BR master (5)
+for further details of the format of
+.IR /etc/postfix/master.cf .
+
+.SH ENVIRONMENT VARIABLES
+
+The following environment variables are available to any filter command:
+
+.TP
+.B EMAIL
+The filename of the email to be processed.  Do not modify this file.
+.TP
+.B OUTFILE
+The filename of the output file.  If this is not left empty, then when the
+message is accepted by the filter, the contents of this file will be sent
+instead of the contents of
+.BR EMAIL .
+.TP
+.B SENDER
+The envelope sender (SMTP MAIL FROM) of the email, if known.  An empty
+sender (i.e. bounce) is denoted by <>, otherwise this will be an email
+address or, if not known, a blank string.
+.TP
+.B RECIPIENT
+The
+.B first
+envelope recipient (SMTP RCPT TO) of the email, if known.  Only the first
+recipient given is put into this variable.  If the envelope recipient is not
+known, this variable will be a blank string.
+.TP
+.B REMOTEIP
+The IP address of the sending server, as collected from the SMTP XFORWARD
+command.  If not known, this variable will be a blank string.
+.TP
+.B HELO
+The SMTP HELO string the sending server used to identify itself, if known,
+or a blank string if not.
+
+.P
+
+Note that only the
+.B EMAIL
+and
+.B OUTFILE
+variables can be trusted, as these are generated by
+.BR @PACKAGE@ .
+Everything else is supplied by a potentially hostile remote host, so should
+be used with care.  If your script uses the shell at all, make sure you
+always fully quote these variables.
+
+Also note that everything but
+.B EMAIL
+and
+.B OUTFILE
+will be truncated to a maximum of 99 characters.
+
+.SH AUTHOR
+
+The author:
+
+.RS
+Andrew Wood <andrew.wood@ivarch.com>
+.br
+.I http://www.ivarch.com/
+.RE
+
+Project home page:
+
+.RS
+.I http://www.ivarch.com/programs/@PACKAGE@.shtml
+.RE
+
+.SH BUGS
+If you find any bugs, please contact the author, either by email or by
+using the contact form on the web site.
+
+.SH "SEE ALSO"
+.BR postfix (1),
+.BR postconf (5),
+.BR master (5)
+
+.SH LICENSE
+This is free software, distributed under the ARTISTIC license.

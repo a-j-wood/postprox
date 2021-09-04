@@ -1,0 +1,21 @@
+Source: postprox
+Section: mail
+Priority: optional
+Maintainer: (nobody)
+Uploaders: (nobody)
+Build-Depends: cdbs (>= 0.4.23-1.1), patchutils (>= 0.2.25), debhelper (>= 4.1.0)
+Standards-Version: 3.6.2.1
+
+Package: postprox
+Architecture: any
+Depends: ${shlibs:Depends}
+Recommends: postfix
+Suggests: mail-transport-agent
+Description: minimal Postfix SMTP proxy
+ The minimal Postfix SMTP proxy copies an SMTP conversation between its
+ input and another SMTP server, but spools the DATA portion to a temporary
+ file and runs a specified program on it before passing it on to the output
+ server - or outputting an SMTP error code instead if the content filter
+ says so.
+ .
+ Homepage: http://www.ivarch.com/programs/postprox.shtml

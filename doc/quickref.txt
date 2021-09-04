@@ -1,0 +1,229 @@
+POSTPROX(1)			 User Manuals			  POSTPROX(1)
+
+NAME
+       postprox - minimal Postfix SMTP proxy
+
+SYNOPSIS
+       postprox HOST:PORT [-c CMD] [-d DIR] [-t SEC] [-rv] [-l [IP:]PORT]
+       postprox -hLV
+
+DESCRIPTION
+       postprox	 reads	SMTP commands on standard input and passes them on to
+       the specified mail server unchanged,  except  for  the  DATA  portion.
+       Output  from the specified mail server is passed back to standard out-
+       put.  The DATA portion from the input mail server (stdin)  is  spooled
+       to a temporary file so that COMMAND can be run on it; if COMMAND exits
+       with a non-zero exit status, its standard error is passed as  an	 SMTP
+       error  to  the input SMTP server (on stdout) and the connection to the
+       output SMTP server is aborted with a QUIT.
+
+       postprox is intended to be used in a  postfix(1)	 configuration	as  a
+       before-queue or after-queue content filter.
+
+       See  the	 EXAMPLE  CONFIGURATION	 section for an example of how to use
+       postprox as a before-queue content filter.
+
+OPTIONS
+       The postprox options are listed below.
+
+       -c, --command COMMAND
+	      Use COMMAND as the filtering command.  This will be  passed  to
+	      sh -c when executed.
+
+	      When COMMAND is run, the environment variable EMAIL will be set
+	      to the filename of the email to be processed, and the  environ-
+	      ment  variable OUTFILE will be set to the filename of an exist-
+	      ing empty file which the filter can optionally put  a  modified
+	      version of the message into.
+
+	      See the ENVIRONMENT VARIABLES section below for more details.
+
+	      The exit status of COMMAND determines whether the email will be
+	      passed through or rejected.  An exit status of 0 means to	 pass
+	      the email through, 1 means to reject it - the last line of COM-
+	      MAND's standard error output will be used as  the	 error	text,
+	      and unless it starts with a 3-digit number and a space, it will
+	      be prefixed with 554 (SMTP hard error).  An exit code of	2  or
+	      more means the filter failed to run correctly.
+
+	      If  the  contents	 of OUTFILE are left alone by COMMAND then an
+	      exit status of 0 means to pass the  email	 through  as  it  was
+	      received.	  If  OUTFILE  contains anything at all, then an exit
+	      status of 0 will cause the contents of  OUTFILE  to  be  passed
+	      through instead of the original email.
+
+       -d, --tempdir DIR
+	      Use  DIR to store temporary files in, instead of the default of
+	      /tmp.
+
+       -t, --timeout TIMEOUT
+	      If the filter command takes longer than TIMEOUT seconds to run,
+	      it will be killed and the email will be allowed to pass through
+	      (or will be rejected if -r was specified).  The default timeout
+	      is 30 seconds.
+
+       -r, --reject
+	      If  the  filter  command times out or cannot be run, reject the
+	      message with a 451 (temporary failure) error instead of  allow-
+	      ing it through.
+
+       -v, --verbose
+	      By  default  only	 errors	 and  warnings are logged.  Adding -v
+	      options increases the amount of information logged.
+
+       -l, --listen [IP:]PORT
+	      Instead of reading from  the  input  SMTP	 server	 on  standard
+	      input,  go  into the background and listen on the given IP:PORT
+	      combination for connections.  The default IP  is	127.0.0.1  if
+	      not  specified.	Listen	mode  is not recommended because then
+	      postfix can't restart postprox if it is killed for any  reason.
+
+       -h, --help
+	      Print a usage message on standard output and exit successfully.
+
+       -L, --license
+	      Print details of the program's license on standard  output  and
+	      exit successfully.
+
+       -V, --version
+	      Print  version  information,  including  a  list	of  available
+	      database backends, on standard output and exit successfully.
+
+EXAMPLE CONFIGURATION
+       This  configuration  is	based  on  steps   outlined   in   the	 file
+       SMTPD_PROXY_README  included  with  postfix(1).	It can be read online
+       here:
+
+	 http://www.postfix.org/SMTPD_PROXY_README.html
+
+       First, set up a user to run the filter as, such as filter.
+
+       Next, create a script or program which can be run  on  an  email	 (the
+       filename	 of  the email to examine will be in the environment variable
+       EMAIL), and which will exit with status	0  if  the  email  is  to  be
+       accepted,  1  if it is to be rejected, or anything else if there was a
+       problem with an aspect of the filter itself.  The  filter  script  can
+       also  output  an	 SMTP  error on standard error if you would like cus-
+       tomised error responses.
+
+       For instance, a script to scan all incoming  email  with	 clamdscan(1)
+       would look like this:
+
+	       #!/bin/sh
+	       /usr/bin/clamdscan --disable-summary --stdout - < "$EMAIL"
+	       STATUS=$?
+	       [ -z "$STATUS" ] && STATUS=2
+	       [ $STATUS -eq 0 ] && exit 0
+	       if [ $STATUS -eq 1 ]; then
+		       echo 550 Message contains a virus 1>&2
+		       exit 1
+	       fi
+	       exit 2
+
+       Now  you	 need  to  reconfigure	postfix(1).   Add  the	following  to
+       /etc/postfix/main.cf:
+
+	       smtpd_proxy_filter=127.0.0.1:10025
+
+       Now add the following to the bottom of /etc/postfix/master.cf:
+
+	       # SMTP proxy.
+	       #
+	       127.0.0.1:10025 inet n  n       n       -       20      spawn
+		   user=filter	 argv=/usr/sbin/postprox   -v	-c    COMMAND
+	      127.0.0.1:10026
+
+	       #
+	       # After-filter SMTP server. Receive mail from the content fil-
+	      ter
+	       # on localhost port 10026.
+	       #
+	       127.0.0.1:10026 inet n  -       n       -	-      smtpd
+		   -o smtpd_authorized_xforward_hosts=127.0.0.0/8
+		   -o smtpd_client_restrictions=
+		   -o smtpd_helo_restrictions=
+		   -o smtpd_sender_restrictions=
+		   -o smtpd_recipient_restrictions=permit_mynetworks,reject
+		   -o smtpd_data_restrictions=
+		   -o smtpd_junk_command_limit=100000
+		   -o smtpd_soft_error_limit=10000
+		   -o smtpd_error_sleep_time=0
+		   -o smtpd_proxy_filter=
+		   -o mynetworks=127.0.0.0/8
+		   -o receive_override_options=no_unknown_recipient_checks
+
+       Finally, do postfix reload and watch the mail logs to ensure that it's
+       working.	  Send	a few test emails to satisfy yourself that the system
+       is still processing mail correctly.
+
+       Remember to replace COMMAND in the above example with the full path to
+       your  filtering	script.	  The script must be executable by the filter
+       user.
+
+       The number just before spawn in the first line of the addition to mas-
+       ter.cf is the maximum number of proxy processes to spawn.  Adjust this
+       according to the needs of your system.
+
+       See the documentation for master(5) for further details of the  format
+       of /etc/postfix/master.cf.
+
+ENVIRONMENT VARIABLES
+       The  following  environment variables are available to any filter com-
+       mand:
+
+       EMAIL  The filename of the email to be processed.  Do not modify	 this
+	      file.
+
+       OUTFILE
+	      The  filename  of	 the output file.  If this is not left empty,
+	      then when the message is accepted by the filter,	the  contents
+	      of this file will be sent instead of the contents of EMAIL.
+
+       SENDER The  envelope  sender  (SMTP MAIL FROM) of the email, if known.
+	      An empty sender (i.e. bounce) is denoted by <>, otherwise	 this
+	      will be an email address or, if not known, a blank string.
+
+       RECIPIENT
+	      The  first  envelope  recipient (SMTP RCPT TO) of the email, if
+	      known.  Only the first recipient given is put into  this	vari-
+	      able.   If  the  envelope recipient is not known, this variable
+	      will be a blank string.
+
+       REMOTEIP
+	      The IP address of the sending server,  as	 collected  from  the
+	      SMTP  XFORWARD  command.	If not known, this variable will be a
+	      blank string.
+
+       HELO   The SMTP HELO  string  the  sending  server  used	 to  identify
+	      itself, if known, or a blank string if not.
+
+       Note  that  only	 the  EMAIL  and OUTFILE variables can be trusted, as
+       these are generated by postprox.	 Everything else  is  supplied	by  a
+       potentially hostile remote host, so should be used with care.  If your
+       script uses the shell at all, make sure you always fully	 quote	these
+       variables.
+
+       Also note that everything but EMAIL and OUTFILE will be truncated to a
+       maximum of 99 characters.
+
+AUTHOR
+       The author:
+
+	      Andrew Wood <andrew.wood@ivarch.com>
+	      http://www.ivarch.com/
+
+       Project home page:
+
+	      http://www.ivarch.com/programs/postprox.shtml
+
+BUGS
+       If you find any bugs, please contact the author, either by email or by
+       using the contact form on the web site.
+
+SEE ALSO
+       postfix(1), postconf(5), master(5)
+
+LICENSE
+       This is free software, distributed under the ARTISTIC license.
+
+Linux				 January 2006			  POSTPROX(1)

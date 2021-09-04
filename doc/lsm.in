@@ -1,0 +1,16 @@
+Begin3
+Title:		@PACKAGE@
+Version:	@VERSION@
+Entered-date:	24JAN06
+Description:	Minimal Postfix SMTP proxy - read SMTP on stdin, pass it
+		through an external content filter, pass it on to another
+		SMTP server.
+Keywords:	SMTP proxy, content filter
+Author:		Andrew Wood <andrew.wood@ivarch.com>
+Maintained-by:	Andrew Wood <andrew.wood@ivarch.com>
+Primary-site:	http://www.ivarch.com/programs/@PACKAGE@.shtml
+Alternate-site:	
+Original-site:
+Platforms:	
+Copying-policy:	Artistic
+End

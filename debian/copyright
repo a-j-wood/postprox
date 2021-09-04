@@ -1,0 +1,20 @@
+This package was debianized by Andrew Wood <andrew.wood@ivarch.com> on
+Fri, 05 Aug 2005 23:56:09 +0100.
+
+It was downloaded from http://www.ivarch.com/programs/postprox.shtml
+
+Upstream Author: Andrew Wood <andrew.wood@ivarch.com>
+
+Copyright Holder: (C) 2006 Andrew Wood <andrew.wood@ivarch.com>
+
+License:
+
+    This program is free software; you can redistribute it and/or modify it
+    under the terms of the "Artistic License" which comes with Debian.
+
+    THIS PACKAGE IS PROVIDED "AS IS" AND WITHOUT ANY EXPRESS OR IMPLIED
+    WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES
+    OF MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+
+On Debian systems, the complete text of the Artistic License
+can be found in `/usr/share/common-licenses/Artistic'.

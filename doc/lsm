@@ -1,0 +1,16 @@
+Begin3
+Title:		postprox
+Version:	0.2.0
+Entered-date:	24JAN06
+Description:	Minimal Postfix SMTP proxy - read SMTP on stdin, pass it
+		through an external content filter, pass it on to another
+		SMTP server.
+Keywords:	SMTP proxy, content filter
+Author:		Andrew Wood <andrew.wood@ivarch.com>
+Maintained-by:	Andrew Wood <andrew.wood@ivarch.com>
+Primary-site:	http://www.ivarch.com/programs/postprox.shtml
+Alternate-site:	
+Original-site:
+Platforms:	
+Copying-policy:	Artistic
+End

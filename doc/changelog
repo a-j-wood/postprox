@@ -1,0 +1,68 @@
+2006-01-24 11:09  ivarch
+
+	* doc/TODO, src/smtp/line.c, src/test/emailinfo.c, src/test/main.c:
+
+	Added test functions for the new IP/HELO/sender/recipient
+	environment variables.
+
+2006-01-24 09:24  ivarch
+
+	* autoconf/make/unreal.mk:
+
+	Added "make rats" and "make neat" developer targets.
+
+2006-01-24 09:10  ivarch
+
+	* doc/quickref.1.in, src/smtp/line.c, src/smtp/runfilter.c:
+
+	Added environment variables for remote IP, HELO, sender, and first
+	recipient; not yet tested, no tests written, but man page updated.
+
+2006-01-24 08:54  ivarch
+
+	* src/smtp/line.c:
+
+	Skip < in address (fix for bug in last commit)
+
+2006-01-24 08:45  ivarch
+
+	* src/smtp/line.c:
+
+	Updated MAIL FROM and RCPT TO email logging to cope with spaces
+	before < (eg "MAIL FROM: <foo>")
+
+2006-01-24 00:02  ivarch
+
+	* doc/NEWS, doc/TODO, doc/VERSION, doc/quickref.1.in,
+	src/main/log.c, src/smtp/line.c, src/smtp/main.c,
+	src/smtp/runfilter.c, src/smtp/smtpi.h:
+
+	Added logging of XFORWARD ip address, HELO, envelope sender, first
+	recipient, message size, and filter status. Extended max syslog
+	line length from 200 to 400, since verbose filter failure messages
+	will not fit otherwise.
+
+2005-08-11 21:28  ivarch
+
+	* README, generate.sh, autoconf/Makefile.in, autoconf/configure.in,
+	autoconf/header.in, autoconf/make/link.mk,
+	autoconf/make/package.mk, autoconf/make/rules.mk,
+	autoconf/make/.cvsignore, autoconf/make/unreal.mk,
+	autoconf/make/vars.mk, autoconf/scripts/depend.sh,
+	autoconf/scripts/index.sh, autoconf/scripts/install.sh,
+	autoconf/scripts/makemake.sh, autoconf/scripts/mkinstalldirs,
+	debian/changelog, debian/compat, debian/control, debian/copyright,
+	debian/doc-base, debian/docs, debian/install, debian/rules,
+	doc/COPYING, doc/INSTALL, doc/NEWS, doc/PACKAGE, doc/TODO,
+	doc/VERSION, doc/lsm.in, doc/quickref.1.in, doc/release-checklist,
+	doc/spec.in, extra/clamdscan.sh, src/include/library.h,
+	src/include/log.h, src/include/options.h, src/library/fdline.c,
+	src/library/getopt.c, src/library/net.c, src/library/writeretry.c,
+	src/smtp/io.c, src/smtp/line.c, src/smtp/loop.c, src/smtp/main.c,
+	src/smtp/runfilter.c, src/smtp/smtpi.h, src/main/help.c,
+	src/main/license.c, src/main/log.c, src/main/main.c,
+	src/main/options.c, src/main/version.c, src/test/dataintegrity.c,
+	src/test/main.c, src/test/testi.h, src/test/writeretry.c:
+
+	Initial revision
+

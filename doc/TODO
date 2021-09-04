@@ -1,0 +1,8 @@
+Things still to do, in order of priority:
+
+  20050808: make read/write line buffers independent of network buffers
+  20050808: deal with disk full condition on spool file
+  20050808: option for max filter message size, deliver if exceeded
+  20050810: additional tests
+
+Any assistance would be appreciated.

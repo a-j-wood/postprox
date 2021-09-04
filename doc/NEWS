@@ -1,0 +1,13 @@
+0.2.0 - 24 January 2006
+  - added $OUTFILE so filtering scripts can modify the email in transit
+  - use putenv() instead of setenv() for better portability
+  - capture IP address, HELO, sender/recipient for logging
+
+0.1.0 - 11 August 2005
+  - changed command line syntax
+  - created testing framework
+  - fixed line reading after feedback from postfix-users mailing list
+  - created tests to throw long lines, dots, etc through the proxy
+
+0.0.1 - 5 August 2005
+  - package created
