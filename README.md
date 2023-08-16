@@ -1,7 +1,7 @@
 Project has left GitHub
 -----------------------
 
-It is now here: [https://codeberg.org/a-j-wood/qsf](https://codeberg.org/a-j-wood/postprox)
+It is now here: [https://codeberg.org/a-j-wood/postprox](https://codeberg.org/a-j-wood/postprox)
 
 This project was briefly hosted on GitHub.  GitHub is a proprietary,
 trade-secret system that is not Free and Open Source Software (FOSS).
